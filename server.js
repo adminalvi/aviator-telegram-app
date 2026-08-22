@@ -8,9 +8,10 @@ const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 app.use(cors());
 
-// Static Files
+// Static Files & Favicon fix
 app.use(express.static(path.join(__dirname)));
-app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/favicon.ico', (req, res) => res.status(204).send());
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -20,7 +21,7 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// Telegram Bot Setup (Using Webhook/Polling safely)
+// Telegram Bot Setup
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (BOT_TOKEN) {
     try {
