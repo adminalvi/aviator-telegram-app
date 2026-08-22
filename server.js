@@ -7,7 +7,7 @@ const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
 
-// 1. CORS Policy aur Headers Fix
+// CORS & Headers configuration
 app.use(cors());
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -15,17 +15,24 @@ app.use((req, res, next) => {
     next();
 });
 
-// 2. Static Files Path Fix (index.html load hone ke liye)
+// Serve Static files directly from root
 app.use(express.static(path.join(__dirname)));
+
+// Ignore Favicon request to prevent Railway 404 crashes
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// Serve main game HTML page
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// Environment variable se token padhega
+// Telegram Bot Setup
 const BOT_TOKEN = process.env.BOT_TOKEN;
-
 if (BOT_TOKEN) {
     const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
@@ -42,6 +49,7 @@ if (BOT_TOKEN) {
     });
 }
 
+// Game State Engine
 let gameState = {
     status: 'WAITING',
     multiplier: 1.00,
@@ -77,11 +85,6 @@ function startGameLoop() {
         }, 100);
     }, 5000);
 }
-
-// 3. Absolute Path Routing Fix
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
 
 startGameLoop();
 
