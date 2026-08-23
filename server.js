@@ -1,340 +1,252 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aviator VIP Casino</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #0b0e14; color: #fff; display: flex; flex-direction: column; height: 100vh; padding: 10px; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 10px 14px; border-radius: 10px; font-size: 14px; }
-        .balance { color: #28a745; font-weight: bold; font-size: 16px; }
-        .nav-tabs { display: flex; gap: 5px; margin: 10px 0; }
-        .tab-btn { flex: 1; padding: 10px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; }
-        .tab-btn.active { background: #28a745; color: #fff; }
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const TelegramBot = require('node-telegram-bot-api');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname)));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+const BOT_TOKEN = process.env.BOT_TOKEN || "8413886563:AAHdpQEsq70sDCTqZvSYa7PsQ4M500URqjA";
+let APP_URL = process.env.APP_URL || "https://aviator-telegram-app-production.up.railway.app";
+if (!APP_URL.startsWith('http')) APP_URL = 'https://' + APP_URL;
+
+const ADMIN_CHAT_ID = "8873354547"; 
+const DB_FILE = path.join(__dirname, 'users_db.json');
+
+let users = {};
+if (fs.existsSync(DB_FILE)) {
+    try { 
+        users = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); 
+    } catch(e) { 
+        users = {}; 
+    }
+}
+
+function saveDB() {
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(users, null, 2));
+    } catch(e) {
+        console.error("DB Save Error:", e.message);
+    }
+}
+
+if (!users[ADMIN_CHAT_ID]) {
+    users[ADMIN_CHAT_ID] = { id: ADMIN_CHAT_ID, name: 'Admin House', balance: 0.00, wagerRequired: 0.00 };
+    saveDB();
+}
+
+let bot = null;
+if (BOT_TOKEN) {
+    try {
+        bot = new TelegramBot(BOT_TOKEN, { polling: true });
         
-        .section { display: none; flex-direction: column; flex-grow: 1; overflow-y: auto; }
-        .section.active { display: flex; }
+        bot.onText(/\/start/, (msg) => {
+            const chatId = msg.chat.id;
+            bot.sendMessage(chatId, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${chatId}\`\n\nDeposit or Withdraw funds directly inside the app!`, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [[{ text: "🎮 Open Aviator Game", web_app: { url: APP_URL } }]]
+                }
+            });
+        });
 
-        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; min-height: 250px; position: relative; overflow: hidden; }
-        #canvas { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 1; }
-        .game-info { z-index: 2; text-align: center; }
-        .multiplier { font-size: 48px; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.8); }
-        .flying { color: #28a745; }
-        .crashed { color: #dc3545; }
-        .status { font-size: 12px; color: #8899a6; margin-top: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
-        
-        .controls { background: #161c28; padding: 12px; border-radius: 10px; z-index:2; }
-        .bet-presets { display: flex; gap: 6px; margin-bottom: 8px; }
-        .preset-btn { flex: 1; padding: 6px; background: #222c3d; border: 1px solid #324158; color: #fff; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
-        .input-group { display: flex; gap: 8px; margin-bottom: 8px; }
-        .bet-input { flex: 1; padding: 10px; background: #0b0e14; border: 1px solid #222c3d; color: #fff; border-radius: 6px; font-size: 14px; text-align: center; }
-        .action-btn { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; text-transform: uppercase; }
-        .btn-bet { background: #28a745; color: #fff; }
-        .btn-withdraw { background: #dc3545; color: #fff; }
-        .btn-cashout { background: #ffc107; color: #000; }
-        .btn-disabled { background: #2c3545; color: #6c757d; cursor: not-allowed; }
+        bot.onText(/\/mybalance/, (msg) => {
+            const chatId = String(msg.chat.id);
+            if (chatId === ADMIN_CHAT_ID) {
+                const adminUser = users[ADMIN_CHAT_ID] || { balance: 0 };
+                bot.sendMessage(chatId, `💰 **Admin House Earnings / Balance:** PKR ${adminUser.balance.toFixed(2)}`);
+            }
+        });
 
-        .card { background: #161c28; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
-        .card h3 { margin-bottom: 10px; font-size: 16px; color: #ffc107; }
-        .method-select { width: 100%; padding: 10px; background: #0b0e14; color: #fff; border: 1px solid #324158; border-radius: 6px; margin-bottom: 10px; }
-        .info-box { background: #0b0e14; padding: 10px; border-radius: 6px; border: 1px solid #222c3d; font-size: 12px; color: #28a745; margin-bottom: 10px; word-break: break-all; }
-        .limit-text { font-size: 11px; color: #ffc107; margin-bottom: 8px; display: block; }
-        
-        .guide-box { background: #131924; border: 1px solid #253347; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 12px; color: #d1d5db; line-height: 1.5; }
-        .guide-box h4 { color: #ffc107; font-size: 13px; margin-bottom: 6px; }
-        .guide-box ol { padding-left: 18px; }
-        .guide-box li { margin-bottom: 4px; }
-    </style>
-</head>
-<body>
+        bot.onText(/\/addbalance (.+) (.+)/, (msg, match) => {
+            const senderId = String(msg.chat.id);
+            if (senderId !== ADMIN_CHAT_ID) return;
 
-    <div class="top-bar">
-        <div id="username">Loading...</div>
-        <div class="balance">PKR <span id="balance">0.00</span></div>
-    </div>
+            const targetUserId = match[1].trim();
+            const amount = parseFloat(match[2]);
 
-    <div class="nav-tabs">
-        <button class="tab-btn active" onclick="switchTab('game', this)">🎮 Game</button>
-        <button class="tab-btn" onclick="switchTab('deposit', this)">💳 Deposit</button>
-        <button class="tab-btn" onclick="switchTab('withdraw', this)">🏧 Withdraw</button>
-    </div>
+            if (!users[targetUserId]) {
+                users[targetUserId] = { id: targetUserId, name: 'Player', balance: 0.00, wagerRequired: 0.00 };
+            }
 
-    <!-- GAME SECTION -->
-    <div id="game-section" class="section active">
-        <div class="game-screen">
-            <canvas id="canvas"></canvas>
-            <div class="game-info">
-                <div id="multiplier" class="multiplier">1.00x</div>
-                <div id="status" class="status">WAITING FOR NEXT ROUND...</div>
-            </div>
-        </div>
+            users[targetUserId].balance += amount;
+            users[targetUserId].wagerRequired = (users[targetUserId].wagerRequired || 0) + amount;
+            saveDB();
 
-        <div class="controls">
-            <div class="bet-presets">
-                <button class="preset-btn" onclick="setBet(50)">50</button>
-                <button class="preset-btn" onclick="setBet(100)">100</button>
-                <button class="preset-btn" onclick="setBet(500)">500</button>
-                <button class="preset-btn" onclick="setBet(1000)">1000</button>
-            </div>
-            <div class="input-group">
-                <input type="number" id="betAmount" class="bet-input" value="100" min="10">
-            </div>
-            <button id="mainBtn" class="action-btn btn-bet" onclick="handleAction()">PLACE BET</button>
-        </div>
-    </div>
+            io.to(targetUserId).emit('user_data', users[targetUserId]);
 
-    <!-- DEPOSIT SECTION WITH URDU/ENGLISH GUIDE -->
-    <div id="deposit-section" class="section">
-        <div class="card">
-            <h3>💳 Deposit Funds (ڈیپازٹ کا طریقہ)</h3>
-            
-            <div class="guide-box">
-                <h4>📌 ڈیپازٹ کرنے کا آسان طریقہ:</h4>
-                <ol>
-                    <li>نیچے سے <b>EasyPaisa</b> یا <b>USDT</b> منتخب کریں۔</li>
-                    <li>دیے گئے نمبر / ایڈریس پر پیسے ٹرانسفر کریں۔</li>
-                    <li>ٹرانزیکشن مکمل ہونے کے بعد **Transaction ID (Trx ID)** کاپی کریں۔</li>
-                    <li>نیچے رقم اور Transaction ID لکھ کر **Submit** بٹن دبا دیں۔</li>
-                    <li>2 se 5 منٹ میں آپ کا بیلنس ایڈ کر دیا جائے گا۔</li>
-                </ol>
-            </div>
-
-            <label style="font-size: 12px; color: #8899a6;">Select Payment Method:</label>
-            <select id="payMethod" class="method-select" onchange="updateDepositDetails()">
-                <option value="EasyPaisa">EasyPaisa (PKR)</option>
-                <option value="USDT">USDT TRC20 (Crypto)</option>
-            </select>
-            
-            <div id="accountInfo" class="info-box"></div>
-            <span id="limitNotice" class="limit-text">⚠️ Minimum Deposit: PKR 300</span>
-            
-            <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount (کم از کم 300)" style="width:100%; margin-bottom:10px;">
-            <input type="text" id="trxId" class="bet-input" placeholder="Enter Transaction ID / Hash (Trx ID)" style="width:100%; margin-bottom:10px;">
-            
-            <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT REQUEST</button>
-        </div>
-    </div>
-
-    <!-- WITHDRAW SECTION WITH URDU/ENGLISH GUIDE -->
-    <div id="withdraw-section" class="section">
-        <div class="card">
-            <h3>🏧 Withdraw Winnings (ودڈرا کا طریقہ)</h3>
-
-            <div class="guide-box">
-                <h4>📌 ودڈرا حاصل کرنے کا طریقہ:</h4>
-                <ol>
-                    <li>اپنا **EasyPaisa / JazzCash / USDT** کا انتخاب کریں۔</li>
-                    <li>کم از کم **500 PKR** یا اس سے زیادہ رقم درج کریں۔</li>
-                    <li>اپنا اکاؤنٹ ٹائٹل اور نمبر درست لکھیں۔</li>
-                    <li>**Request Withdrawal** پر کلک کریں۔ رقم آپ کے اکاؤنٹ میں بھیج دی جائے گی۔</li>
-                </ol>
-            </div>
-
-            <label style="font-size: 12px; color: #8899a6;">Select Withdrawal Method:</label>
-            <select id="withMethod" class="method-select">
-                <option value="EasyPaisa">EasyPaisa</option>
-                <option value="JazzCash">JazzCash</option>
-                <option value="USDT TRC20">USDT TRC20</option>
-            </select>
-            
-            <span class="limit-text">⚠️ Minimum Withdrawal: PKR 500</span>
-            
-            <input type="number" id="withAmount" class="bet-input" placeholder="Enter Amount (Min PKR 500)" style="width:100%; margin-bottom:10px;">
-            <input type="text" id="withAccount" class="bet-input" placeholder="Enter Account Title & Number / Wallet" style="width:100%; margin-bottom:10px;">
-            
-            <button class="action-btn btn-withdraw" onclick="submitWithdraw()">REQUEST WITHDRAWAL</button>
-        </div>
-    </div>
-
-    <script>
-        const tg = window.Telegram?.WebApp;
-        if (tg) { tg.ready(); tg.expand(); }
-
-        const socket = io(window.location.origin);
-        let userState = { balance: 0 };
-        let currentStatus = 'WAITING';
-        let hasBet = false;
-        let flightProgress = 0;
-
-        // Audio Engine Sound
-        let audioCtx = null;
-        let oscillator = null;
-
-        function playPlaneSound() {
+            bot.sendMessage(senderId, `✅ **Success!** Added PKR ${amount} to User ID: \`${targetUserId}\`.\nNew Balance: PKR ${users[targetUserId].balance}`);
             try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                if (oscillator) oscillator.stop();
-                oscillator = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(120, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                oscillator.connect(gain);
-                gain.connect(audioCtx.destination);
-                oscillator.start();
-            } catch(e){}
-        }
-
-        function stopPlaneSound() {
-            try {
-                if (oscillator) { oscillator.stop(); oscillator = null; }
-            } catch(e){}
-        }
-
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-
-        function drawPlane(progress, crashed) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (currentStatus === 'WAITING') return;
-
-            const startX = 20;
-            const startY = canvas.height - 20;
-            const endX = Math.min(canvas.width - 40, 20 + progress * (canvas.width - 60));
-            const endY = Math.max(40, canvas.height - 20 - progress * (canvas.height - 60));
-
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.quadraticCurveTo(startX + (endX - startX)/2, startY, endX, endY);
-            ctx.strokeStyle = crashed ? '#dc3545' : '#e51029';
-            ctx.lineWidth = 4;
-            ctx.stroke();
-
-            ctx.font = '24px serif';
-            ctx.fillText(crashed ? '💥' : '✈️', endX - 10, endY + 8);
-        }
-
-        socket.on('connect', () => {
-            const tgUser = tg?.initDataUnsafe?.user;
-            let userData = tgUser && tgUser.id ? { id: String(tgUser.id), first_name: tgUser.first_name || 'Player' } : { id: '8873354547', first_name: 'Saleem' };
-            socket.emit('init_user', userData);
+                bot.sendMessage(targetUserId, `🎉 **Deposit Approved!** PKR ${amount} has been added to your game account. Play games to unlock withdrawal!`);
+            } catch(e) {}
         });
 
-        socket.on('user_data', (data) => {
-            userState = data;
-            document.getElementById('balance').innerText = data.balance.toFixed(2);
-            document.getElementById('username').innerText = data.name;
-        });
+    } catch (e) {
+        console.error("Bot Initialization Error:", e.message);
+    }
+}
 
-        socket.on('deposit_notice', (data) => alert(data.msg));
-        socket.on('withdraw_notice', (data) => alert(data.msg));
+let gameState = { status: 'WAITING', multiplier: 1.00, crashPoint: 1.00, bets: {} };
 
-        socket.on('game_state', (data) => {
-            currentStatus = data.status;
-            if (data.status === 'WAITING') {
-                stopPlaneSound();
-                hasBet = false;
-                flightProgress = 0;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                document.getElementById('multiplier').className = 'multiplier';
-                document.getElementById('multiplier').innerText = '1.00x';
-                document.getElementById('status').innerText = 'PLACE YOUR BETS (5s)...';
-                updateButton('BET', false);
+function generateCrashPoint() {
+    const e = Math.pow(2, 52);
+    const h = Math.floor(Math.random() * e);
+    return Math.min(Math.max(1.01, Math.floor((100 * e - h) / (e - h)) / 100), 100.00);
+}
+
+function startGameLoop() {
+    gameState.status = 'WAITING';
+    gameState.multiplier = 1.00;
+    gameState.bets = {};
+    io.emit('game_state', { status: gameState.status, multiplier: 1.00 });
+
+    // Exact 5 seconds for placing bet
+    setTimeout(() => {
+        gameState.status = 'FLYING';
+        gameState.crashPoint = generateCrashPoint();
+        io.emit('game_started', { status: 'FLYING' });
+
+        let interval = setInterval(() => {
+            gameState.multiplier = parseFloat((gameState.multiplier + 0.01).toFixed(2));
+            io.emit('tick', { multiplier: gameState.multiplier });
+
+            if (gameState.multiplier >= gameState.crashPoint) {
+                clearInterval(interval);
+                gameState.status = 'CRASHED';
+
+                let totalLostInRound = 0;
+                for (let socketId in gameState.bets) {
+                    let bet = gameState.bets[socketId];
+                    if (!bet.cashedOut) {
+                        totalLostInRound += bet.amount;
+                    }
+                }
+
+                if (totalLostInRound > 0) {
+                    if (!users[ADMIN_CHAT_ID]) {
+                        users[ADMIN_CHAT_ID] = { id: ADMIN_CHAT_ID, name: 'Admin House', balance: 0.00, wagerRequired: 0.00 };
+                    }
+                    users[ADMIN_CHAT_ID].balance += totalLostInRound;
+                    saveDB();
+                }
+
+                io.emit('crashed', { crashPoint: gameState.crashPoint });
+                
+                // 3 Seconds delay after crash
+                setTimeout(startGameLoop, 3000);
             }
+        }, 100);
+    }, 5000);
+}
+
+io.on('connection', (socket) => {
+    socket.on('init_user', (tgUser) => {
+        const userId = tgUser?.id ? String(tgUser.id) : socket.id;
+        const name = tgUser?.first_name ? `${tgUser.first_name} ${tgUser.last_name || ''}` : 'Player';
+
+        if (!users[userId]) {
+            users[userId] = { id: userId, name: name.trim(), balance: 0.00, wagerRequired: 0.00 };
+            saveDB();
+        }
+        socket.userId = userId;
+        socket.join(userId);
+        socket.emit('user_data', users[userId]);
+        socket.emit('game_state', { status: gameState.status, multiplier: gameState.multiplier });
+    });
+
+    socket.on('request_deposit', (data) => {
+        const userId = socket.userId;
+        socket.emit('deposit_notice', { 
+            msg: `Deposit request for PKR ${data.amount} via ${data.method} submitted! Admin will verify Transaction ID: ${data.trxId}` 
         });
 
-        socket.on('game_started', () => {
-            currentStatus = 'FLYING';
-            playPlaneSound();
-            if (hasBet) updateButton('CASHOUT', false);
-            else updateButton('IN PROGRESS...', true);
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID, `📥 **NEW DEPOSIT REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${data.amount}\n💳 **Method:** ${data.method}\n🧾 **TRX ID:** \`${data.trxId}\`\n\nTo approve send:\n\`/addbalance ${userId} ${data.amount}\``, { parse_mode: 'Markdown' });
+        }
+    });
+
+    socket.on('request_withdraw', (data) => {
+        const userId = socket.userId;
+        const user = users[userId];
+        const withdrawAmount = parseFloat(data.amount);
+
+        if (!user || user.balance < withdrawAmount) {
+            return socket.emit('error_msg', 'Insufficient balance for withdrawal!');
+        }
+
+        if (withdrawAmount < 500) {
+            return socket.emit('error_msg', 'Minimum withdrawal limit is PKR 500!');
+        }
+
+        if (user.wagerRequired && user.wagerRequired > 0) {
+            return socket.emit('error_msg', `Cannot withdraw! You need to play PKR ${user.wagerRequired.toFixed(2)} worth of bets first before withdrawing.`);
+        }
+
+        user.balance -= withdrawAmount;
+        saveDB();
+        socket.emit('user_data', user);
+
+        socket.emit('withdraw_notice', { 
+            msg: `Withdrawal request for PKR ${withdrawAmount} submitted successfully! Funds will be transferred shortly.` 
         });
 
-        socket.on('tick', (data) => {
-            document.getElementById('multiplier').className = 'multiplier flying';
-            document.getElementById('multiplier').innerText = data.multiplier.toFixed(2) + 'x';
-            document.getElementById('status').innerText = 'PLANE IS FLYING...';
-            flightProgress = Math.min(1, flightProgress + 0.015);
-            drawPlane(flightProgress, false);
-
-            if (hasBet) {
-                const currentAmount = parseFloat(document.getElementById('betAmount').value) || 0;
-                document.getElementById('mainBtn').innerText = `CASHOUT (PKR ${(currentAmount * data.multiplier).toFixed(2)})`;
-            }
-        });
-
-        socket.on('crashed', (data) => {
-            currentStatus = 'CRASHED';
-            stopPlaneSound();
-            hasBet = false;
-            drawPlane(flightProgress, true);
-            document.getElementById('multiplier').className = 'multiplier crashed';
-            document.getElementById('multiplier').innerText = data.crashPoint.toFixed(2) + 'x';
-            document.getElementById('status').innerText = 'FLEW AWAY!';
-            updateButton('WAITING...', true);
-        });
-
-        socket.on('cashout_success', (data) => {
-            hasBet = false;
-            alert(`Cashed out at ${data.multiplier}x! Won PKR ${data.winAmount}`);
-            updateButton('CASHED OUT', true);
-        });
-
-        socket.on('error_msg', (msg) => alert(msg));
-
-        function switchTab(tabName, btn) {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(tabName + '-section').classList.add('active');
-            btn.classList.add('active');
-            if (tabName === 'deposit') updateDepositDetails();
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID, `📤 **NEW WITHDRAWAL REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${withdrawAmount}\n💳 **Method:** ${data.method}\n🏦 **Account Details:** \`${data.accountDetails}\`\n\nPlease transfer PKR ${withdrawAmount} to the user!`, { parse_mode: 'Markdown' });
         }
+    });
 
-        function updateDepositDetails() {
-            const method = document.getElementById('payMethod').value;
-            const infoBox = document.getElementById('accountInfo');
-            if (method === 'EasyPaisa') {
-                infoBox.innerHTML = `<b>EasyPaisa / IBAN Account:</b><br><code>PK95TMFB0000000027110903</code>`;
-            } else {
-                infoBox.innerHTML = `<b>USDT TRC20 Address:</b><br><code>TGGTyCLeX4vLDpSbTgCchgSB4AaiKLaoL9</code>`;
-            }
+    socket.on('place_bet', (data) => {
+        const user = users[socket.userId];
+        const betAmount = parseFloat(data.amount);
+
+        if (gameState.status !== 'WAITING') return socket.emit('error_msg', 'Round started! Wait for next round.');
+        if (!user || user.balance < betAmount || betAmount <= 0) return socket.emit('error_msg', 'Insufficient balance!');
+
+        user.balance -= betAmount;
+        
+        if (user.wagerRequired > 0) {
+            user.wagerRequired = Math.max(0, user.wagerRequired - betAmount);
         }
+        
+        saveDB();
 
-        function setBet(val) { document.getElementById('betAmount').value = val; }
+        gameState.bets[socket.id] = { userId: socket.userId, amount: betAmount, cashedOut: false };
 
-        function submitDeposit() {
-            const method = document.getElementById('payMethod').value;
-            const amount = parseFloat(document.getElementById('depAmount').value);
-            const trxId = document.getElementById('trxId').value.trim();
-            if (!amount || !trxId) return alert('Enter amount and TRX ID!');
-            socket.emit('request_deposit', { method, amount, trxId });
-        }
+        socket.emit('user_data', user);
+        socket.emit('bet_confirmed', { amount: betAmount });
+    });
 
-        function submitWithdraw() {
-            const method = document.getElementById('withMethod').value;
-            const amount = parseFloat(document.getElementById('withAmount').value);
-            const accountDetails = document.getElementById('withAccount').value.trim();
-            if (!amount || !accountDetails) return alert('Enter amount and account details!');
-            socket.emit('request_withdraw', { method, amount, accountDetails });
-        }
+    socket.on('cashout', () => {
+        const bet = gameState.bets[socket.id];
+        const user = users[socket.userId];
 
-        function handleAction() {
-            if (currentStatus === 'WAITING' && !hasBet) {
-                const amount = parseFloat(document.getElementById('betAmount').value);
-                socket.emit('place_bet', { amount });
-                hasBet = true;
-                updateButton('BET PLACED', true);
-            } else if (currentStatus === 'FLYING' && hasBet) {
-                socket.emit('cashout');
-            }
-        }
+        if (gameState.status !== 'FLYING' || !bet || bet.cashedOut) return;
 
-        function updateButton(text, disabled) {
-            const btn = document.getElementById('mainBtn');
-            btn.innerText = text;
-            btn.disabled = disabled;
-            if (disabled) btn.className = 'action-btn btn-disabled';
-            else if (text.includes('CASHOUT')) btn.className = 'action-btn btn-cashout';
-            else btn.className = 'action-btn btn-bet';
-        }
+        bet.cashedOut = true;
+        const winAmount = parseFloat((bet.amount * gameState.multiplier).toFixed(2));
+        user.balance += winAmount;
+        saveDB();
 
-        updateDepositDetails();
-    </script>
-</body>
-</html>
+        socket.emit('user_data', user);
+        socket.emit('cashout_success', { winAmount, multiplier: gameState.multiplier });
+    });
+});
+
+startGameLoop();
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+});
