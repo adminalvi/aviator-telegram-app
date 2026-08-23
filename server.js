@@ -22,13 +22,16 @@ if (!APP_URL.startsWith('http')) APP_URL = 'https://' + APP_URL;
 const users = {}; 
 let bot = null;
 
+// SET YOUR TELEGRAM CHAT ID HERE TO RECEIVE WITHDRAW NOTIFICATIONS DIRECTLY
+const ADMIN_CHAT_ID = "8873354547"; 
+
 if (BOT_TOKEN) {
     try {
         bot = new TelegramBot(BOT_TOKEN, { polling: true });
         
         bot.onText(/\/start/, (msg) => {
             const chatId = msg.chat.id;
-            bot.sendMessage(chatId, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${chatId}\`\n\nDeposit funds via EasyPaisa or USDT TRC20 to start playing!`, {
+            bot.sendMessage(chatId, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${chatId}\`\n\nDeposit or Withdraw funds directly inside the app!`, {
                 parse_mode: 'Markdown',
                 reply_markup: {
                     inline_keyboard: [[{ text: "🎮 Open Aviator Game", web_app: { url: APP_URL } }]]
@@ -36,7 +39,7 @@ if (BOT_TOKEN) {
             });
         });
 
-        // ADMIN COMMAND: /addbalance USER_ID AMOUNT
+        // ADMIN COMMAND TO ADD BALANCE: /addbalance USER_ID AMOUNT
         bot.onText(/\/addbalance (.+) (.+)/, (msg, match) => {
             const senderId = String(msg.chat.id);
             const targetUserId = match[1].trim();
@@ -51,7 +54,6 @@ if (BOT_TOKEN) {
 
             bot.sendMessage(senderId, `✅ **Success!** Added PKR ${amount} to User ID: \`${targetUserId}\`.\nNew Balance: PKR ${users[targetUserId].balance}`);
             
-            // Notify Player
             try {
                 bot.sendMessage(targetUserId, `🎉 **Deposit Approved!** PKR ${amount} has been added to your game account. Enjoy!`);
             } catch(e) {}
@@ -113,15 +115,39 @@ io.on('connection', (socket) => {
 
     socket.on('request_deposit', (data) => {
         const userId = socket.userId;
-        const user = users[userId];
-        
         socket.emit('deposit_notice', { 
-            msg: `Deposit request for PKR ${data.amount} via ${data.method} submitted successfully! Admin will verify Transaction ID: ${data.trxId}` 
+            msg: `Deposit request for PKR ${data.amount} via ${data.method} submitted! Admin will verify Transaction ID: ${data.trxId}` 
         });
 
-        // Broadcast to Bot Logs if Bot exists
-        if (bot && userId) {
-            console.log(`[DEPOSIT REQUEST] User: ${userId} | Amount: ${data.amount} | Method: ${data.method} | TRX: ${data.trxId}`);
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID || userId, `📥 **NEW DEPOSIT REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${data.amount}\n💳 **Method:** ${data.method}\n🧾 **TRX ID:** \`${data.trxId}\`\n\nTo approve send:\n\`/addbalance ${userId} ${data.amount}\``, { parse_mode: 'Markdown' });
+        }
+    });
+
+    socket.on('request_withdraw', (data) => {
+        const userId = socket.userId;
+        const user = users[userId];
+        const withdrawAmount = parseFloat(data.amount);
+
+        if (!user || user.balance < withdrawAmount) {
+            return socket.emit('error_msg', 'Insufficient balance for withdrawal!');
+        }
+
+        if (withdrawAmount < 500) {
+            return socket.emit('error_msg', 'Minimum withdrawal limit is PKR 500!');
+        }
+
+        // Deduct balance immediately upon request
+        user.balance -= withdrawAmount;
+        socket.emit('user_data', user);
+
+        socket.emit('withdraw_notice', { 
+            msg: `Withdrawal request for PKR ${withdrawAmount} submitted successfully! Funds will be transferred shortly.` 
+        });
+
+        // Send alert to Admin on Telegram
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID || userId, `📤 **NEW WITHDRAWAL REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${withdrawAmount}\n💳 **Method:** ${data.method}\n🏦 **Account Details:** \`${data.accountDetails}\`\n\nPlease transfer PKR ${withdrawAmount} to the user!`, { parse_mode: 'Markdown' });
         }
     });
 
@@ -130,7 +156,7 @@ io.on('connection', (socket) => {
         const betAmount = parseFloat(data.amount);
 
         if (gameState.status !== 'WAITING') return socket.emit('error_msg', 'Round started! Wait for next round.');
-        if (!user || user.balance < betAmount || betAmount <= 0) return socket.emit('error_msg', 'Insufficient balance! Please deposit funds.');
+        if (!user || user.balance < betAmount || betAmount <= 0) return socket.emit('error_msg', 'Insufficient balance!');
 
         user.balance -= betAmount;
         gameState.bets[socket.id] = { userId: socket.userId, amount: betAmount, cashedOut: false };
@@ -158,4 +184,3 @@ startGameLoop();
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
-        
