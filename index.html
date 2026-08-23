@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Aviator VIP Casino</title>
-    <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -19,14 +18,16 @@
         .section { display: none; flex-direction: column; flex-grow: 1; }
         .section.active { display: flex; }
 
-        /* Game UI */
-        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; min-height: 220px; }
-        .multiplier { font-size: 48px; font-weight: 900; color: #fff; }
+        /* Game UI Canvas */
+        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; min-height: 250px; position: relative; overflow: hidden; }
+        #canvas { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 1; }
+        .game-info { z-index: 2; text-align: center; }
+        .multiplier { font-size: 48px; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.8); }
         .flying { color: #28a745; }
         .crashed { color: #dc3545; }
-        .status { font-size: 12px; color: #8899a6; margin-top: 5px; text-transform: uppercase; }
+        .status { font-size: 12px; color: #8899a6; margin-top: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
         
-        .controls { background: #161c28; padding: 12px; border-radius: 10px; }
+        .controls { background: #161c28; padding: 12px; border-radius: 10px; z-index:2; }
         .bet-presets { display: flex; gap: 6px; margin-bottom: 8px; }
         .preset-btn { flex: 1; padding: 6px; background: #222c3d; border: 1px solid #324158; color: #fff; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
         .input-group { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -61,8 +62,11 @@
     <!-- GAME TAB -->
     <div id="game-section" class="section active">
         <div class="game-screen">
-            <div id="multiplier" class="multiplier">1.00x</div>
-            <div id="status" class="status">WAITING FOR NEXT ROUND...</div>
+            <canvas id="canvas"></canvas>
+            <div class="game-info">
+                <div id="multiplier" class="multiplier">1.00x</div>
+                <div id="status" class="status">WAITING FOR NEXT ROUND...</div>
+            </div>
         </div>
 
         <div class="controls">
@@ -83,19 +87,15 @@
     <div id="deposit-section" class="section">
         <div class="card">
             <h3>Deposit Funds</h3>
-            
             <label style="font-size: 12px; color: #8899a6;">Select Payment Method:</label>
             <select id="payMethod" class="method-select" onchange="updateDepositDetails()">
                 <option value="EasyPaisa">EasyPaisa (PKR)</option>
                 <option value="USDT">USDT TRC20 (Crypto)</option>
             </select>
-
             <div id="accountInfo" class="info-box"></div>
             <span id="limitNotice" class="limit-text">⚠️ Minimum Deposit: PKR 300</span>
-
             <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount" style="width:100%; margin-bottom:10px;">
             <input type="text" id="trxId" class="bet-input" placeholder="Enter Transaction ID / Hash" style="width:100%; margin-bottom:10px;">
-            
             <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT REQUEST</button>
         </div>
     </div>
@@ -104,76 +104,79 @@
     <div id="withdraw-section" class="section">
         <div class="card">
             <h3>Withdraw Winnings</h3>
-            
             <label style="font-size: 12px; color: #8899a6;">Select Withdrawal Method:</label>
             <select id="withMethod" class="method-select">
                 <option value="EasyPaisa">EasyPaisa</option>
                 <option value="JazzCash">JazzCash</option>
                 <option value="USDT TRC20">USDT TRC20</option>
             </select>
-
-            <span class="limit-text">⚠️ Minimum Withdrawal: PKR 500 (No Max Limit)</span>
-
+            <span class="limit-text">⚠️ Minimum Withdrawal: PKR 500 (Must play games before withdraw)</span>
             <input type="number" id="withAmount" class="bet-input" placeholder="Enter Amount (Min PKR 500)" style="width:100%; margin-bottom:10px;">
             <input type="text" id="withAccount" class="bet-input" placeholder="Enter Account Title & Number / Wallet" style="width:100%; margin-bottom:10px;">
-            
             <button class="action-btn btn-withdraw" onclick="submitWithdraw()">REQUEST WITHDRAWAL</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram?.WebApp;
-        if (tg) {
-            tg.ready();
-            tg.expand();
-        }
+        if (tg) { tg.ready(); tg.expand(); }
 
         const socket = io(window.location.origin);
         let userState = { balance: 0 };
         let currentStatus = 'WAITING';
         let hasBet = false;
+        let flightProgress = 0;
+
+        // Canvas Red Plane Rendering
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function drawPlane(progress, crashed) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (currentStatus === 'WAITING') return;
+
+            const startX = 20;
+            const startY = canvas.height - 20;
+            const endX = Math.min(canvas.width - 40, 20 + progress * (canvas.width - 60));
+            const endY = Math.max(40, canvas.height - 20 - progress * (canvas.height - 60));
+
+            // Curve Line
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.quadraticCurveTo(startX + (endX - startX)/2, startY, endX, endY);
+            ctx.strokeStyle = crashed ? '#dc3545' : '#e51029';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Plane Icon ✈️
+            ctx.font = '24px serif';
+            ctx.fillText(crashed ? '💥' : '✈️', endX - 10, endY + 8);
+        }
 
         socket.on('connect', () => {
-            // Fetch real Telegram user details from Telegram WebApp
             const tgUser = tg?.initDataUnsafe?.user;
-            let userData = null;
-
-            if (tgUser && tgUser.id) {
-                userData = {
-                    id: String(tgUser.id),
-                    first_name: tgUser.first_name || 'Player',
-                    last_name: tgUser.last_name || ''
-                };
-            } else {
-                // Fallback for normal browser testing
-                userData = { id: '8873354547', first_name: 'Saleem', last_name: 'Akram' };
-            }
-
+            let userData = tgUser && tgUser.id ? { id: String(tgUser.id), first_name: tgUser.first_name || 'Player' } : { id: '8873354547', first_name: 'Saleem' };
             socket.emit('init_user', userData);
         });
 
         socket.on('user_data', (data) => {
             userState = data;
             document.getElementById('balance').innerText = data.balance.toFixed(2);
-            document.getElementById('username').innerText = data.name + ` (${data.id})`;
+            document.getElementById('username').innerText = data.name;
         });
 
-        socket.on('deposit_notice', (data) => {
-            alert(data.msg);
-            document.getElementById('depAmount').value = '';
-            document.getElementById('trxId').value = '';
-        });
-
-        socket.on('withdraw_notice', (data) => {
-            alert(data.msg);
-            document.getElementById('withAmount').value = '';
-            document.getElementById('withAccount').value = '';
-        });
+        socket.on('deposit_notice', (data) => alert(data.msg));
+        socket.on('withdraw_notice', (data) => alert(data.msg));
 
         socket.on('game_state', (data) => {
             currentStatus = data.status;
             if (data.status === 'WAITING') {
                 hasBet = false;
+                flightProgress = 0;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
                 document.getElementById('multiplier').className = 'multiplier';
                 document.getElementById('multiplier').innerText = '1.00x';
                 document.getElementById('status').innerText = 'PLACE YOUR BETS (5s)...';
@@ -183,27 +186,27 @@
 
         socket.on('game_started', () => {
             currentStatus = 'FLYING';
-            if (hasBet) {
-                updateButton('CASHOUT', false);
-            } else {
-                updateButton('IN PROGRESS...', true);
-            }
+            if (hasBet) updateButton('CASHOUT', false);
+            else updateButton('IN PROGRESS...', true);
         });
 
         socket.on('tick', (data) => {
             document.getElementById('multiplier').className = 'multiplier flying';
             document.getElementById('multiplier').innerText = data.multiplier.toFixed(2) + 'x';
             document.getElementById('status').innerText = 'PLANE IS FLYING...';
+            flightProgress = Math.min(1, flightProgress + 0.015);
+            drawPlane(flightProgress, false);
+
             if (hasBet) {
                 const currentAmount = parseFloat(document.getElementById('betAmount').value) || 0;
-                const winEst = (currentAmount * data.multiplier).toFixed(2);
-                document.getElementById('mainBtn').innerText = `CASHOUT (PKR ${winEst})`;
+                document.getElementById('mainBtn').innerText = `CASHOUT (PKR ${(currentAmount * data.multiplier).toFixed(2)})`;
             }
         });
 
         socket.on('crashed', (data) => {
             currentStatus = 'CRASHED';
             hasBet = false;
+            drawPlane(flightProgress, true);
             document.getElementById('multiplier').className = 'multiplier crashed';
             document.getElementById('multiplier').innerText = data.crashPoint.toFixed(2) + 'x';
             document.getElementById('status').innerText = 'FLEW AWAY!';
@@ -212,7 +215,7 @@
 
         socket.on('cashout_success', (data) => {
             hasBet = false;
-            alert(`Cashed out successfully at ${data.multiplier}x! Won PKR ${data.winAmount}`);
+            alert(`Cashed out at ${data.multiplier}x! Won PKR ${data.winAmount}`);
             updateButton('CASHED OUT', true);
         });
 
@@ -229,30 +232,20 @@
         function updateDepositDetails() {
             const method = document.getElementById('payMethod').value;
             const infoBox = document.getElementById('accountInfo');
-            const limitText = document.getElementById('limitNotice');
-
             if (method === 'EasyPaisa') {
                 infoBox.innerHTML = `<b>EasyPaisa / IBAN Account:</b><br><code>PK95TMFB0000000027110903</code>`;
-                limitText.innerText = "⚠️ Minimum Deposit Limit: PKR 300";
             } else {
                 infoBox.innerHTML = `<b>USDT TRC20 Address:</b><br><code>TGGTyCLeX4vLDpSbTgCchgSB4AaiKLaoL9</code>`;
-                limitText.innerText = "⚠️ Minimum Deposit Limit: $10 USDT (PKR 2,800)";
             }
         }
 
-        function setBet(val) {
-            document.getElementById('betAmount').value = val;
-        }
+        function setBet(val) { document.getElementById('betAmount').value = val; }
 
         function submitDeposit() {
             const method = document.getElementById('payMethod').value;
             const amount = parseFloat(document.getElementById('depAmount').value);
             const trxId = document.getElementById('trxId').value.trim();
-
-            if (!amount || !trxId) return alert('Please enter amount and Transaction ID!');
-            if (method === 'EasyPaisa' && amount < 300) return alert('Minimum deposit for EasyPaisa is PKR 300!');
-            if (method === 'USDT' && amount < 10) return alert('Minimum deposit for USDT TRC20 is $10 USDT!');
-
+            if (!amount || !trxId) return alert('Enter amount and TRX ID!');
             socket.emit('request_deposit', { method, amount, trxId });
         }
 
@@ -260,10 +253,7 @@
             const method = document.getElementById('withMethod').value;
             const amount = parseFloat(document.getElementById('withAmount').value);
             const accountDetails = document.getElementById('withAccount').value.trim();
-
-            if (!amount || !accountDetails) return alert('Please enter withdrawal amount and account details!');
-            if (amount < 500) return alert('Minimum withdrawal amount is PKR 500!');
-
+            if (!amount || !accountDetails) return alert('Enter amount and account details!');
             socket.emit('request_withdraw', { method, amount, accountDetails });
         }
 
