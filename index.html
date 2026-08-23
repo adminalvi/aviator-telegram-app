@@ -3,53 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aviator Real Game</title>
+    <title>Aviator Live Real Money</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { background: #0b0e14; color: #fff; display: flex; flex-direction: column; height: 100vh; padding: 15px; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 12px 16px; border-radius: 10px; }
-        .balance { color: #28a745; font-weight: bold; font-size: 18px; }
-        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 20px 0; background: #121824; border-radius: 15px; border: 1px solid #1e2738; }
-        .multiplier { font-size: 56px; font-weight: 900; color: #fff; }
+        body { background: #0b0e14; color: #fff; display: flex; flex-direction: column; height: 100vh; padding: 10px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 10px 14px; border-radius: 10px; font-size: 14px; }
+        .balance { color: #28a745; font-weight: bold; font-size: 16px; }
+        .nav-tabs { display: flex; gap: 5px; margin: 10px 0; }
+        .tab-btn { flex: 1; padding: 8px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .tab-btn.active { background: #28a745; color: #fff; }
+        
+        .section { display: none; flex-direction: column; flex-grow: 1; }
+        .section.active { display: flex; }
+
+        /* Game Screen */
+        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; }
+        .multiplier { font-size: 48px; font-weight: 900; color: #fff; }
         .flying { color: #28a745; }
         .crashed { color: #dc3545; }
-        .status { font-size: 14px; color: #8899a6; margin-top: 5px; text-transform: uppercase; }
-        .controls { background: #161c28; padding: 15px; border-radius: 12px; }
-        .bet-presets { display: flex; gap: 8px; margin-bottom: 10px; }
-        .preset-btn { flex: 1; padding: 8px; background: #222c3d; border: 1px solid #324158; color: #fff; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
-        .bet-input { flex: 1; padding: 12px; background: #0b0e14; border: 1px solid #222c3d; color: #fff; border-radius: 8px; font-size: 16px; text-align: center; }
-        .action-btn { width: 100%; padding: 16px; font-size: 18px; font-weight: bold; border-radius: 10px; border: none; cursor: pointer; text-transform: uppercase; }
+        .status { font-size: 12px; color: #8899a6; margin-top: 5px; text-transform: uppercase; }
+        
+        .controls { background: #161c28; padding: 12px; border-radius: 10px; }
+        .bet-presets { display: flex; gap: 6px; margin-bottom: 8px; }
+        .preset-btn { flex: 1; padding: 6px; background: #222c3d; border: 1px solid #324158; color: #fff; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
+        .input-group { display: flex; gap: 8px; margin-bottom: 8px; }
+        .bet-input { flex: 1; padding: 10px; background: #0b0e14; border: 1px solid #222c3d; color: #fff; border-radius: 6px; font-size: 14px; text-align: center; }
+        .action-btn { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; text-transform: uppercase; }
         .btn-bet { background: #28a745; color: #fff; }
         .btn-cashout { background: #ffc107; color: #000; }
         .btn-disabled { background: #2c3545; color: #6c757d; cursor: not-allowed; }
+
+        /* Deposit Screen Styling */
+        .deposit-card { background: #161c28; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
+        .deposit-card h3 { margin-bottom: 10px; font-size: 16px; color: #ffc107; }
+        .method-select { width: 100%; padding: 10px; background: #0b0e14; color: #fff; border: 1px solid #324158; border-radius: 6px; margin-bottom: 10px; }
+        .instructions { font-size: 12px; color: #aaa; line-height: 1.5; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
     <div class="top-bar">
-        <div id="username">Player</div>
-        <div class="balance">Rs. <span id="balance">1000.00</span></div>
+        <div id="username">Loading...</div>
+        <div class="balance">PKR <span id="balance">0.00</span></div>
     </div>
 
-    <div class="game-screen">
-        <div id="multiplier" class="multiplier">1.00x</div>
-        <div id="status" class="status">WAITING FOR NEXT ROUND...</div>
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('game', this)">🎮 Game</button>
+        <button class="tab-btn" onclick="switchTab('deposit', this)">💳 Deposit / Wallet</button>
     </div>
 
-    <div class="controls">
-        <div class="bet-presets">
-            <button class="preset-btn" onclick="setBet(50)">50</button>
-            <button class="preset-btn" onclick="setBet(100)">100</button>
-            <button class="preset-btn" onclick="setBet(500)">500</button>
-            <button class="preset-btn" onclick="setBet(1000)">1000</button>
+    <!-- GAME SECTION -->
+    <div id="game-section" class="section active">
+        <div class="game-screen">
+            <div id="multiplier" class="multiplier">1.00x</div>
+            <div id="status" class="status">WAITING FOR NEXT ROUND...</div>
         </div>
-        <div class="input-group">
-            <input type="number" id="betAmount" class="bet-input" value="100" min="10">
+
+        <div class="controls">
+            <div class="bet-presets">
+                <button class="preset-btn" onclick="setBet(50)">50</button>
+                <button class="preset-btn" onclick="setBet(100)">100</button>
+                <button class="preset-btn" onclick="setBet(500)">500</button>
+                <button class="preset-btn" onclick="setBet(1000)">1000</button>
+            </div>
+            <div class="input-group">
+                <input type="number" id="betAmount" class="bet-input" value="100" min="10">
+            </div>
+            <button id="mainBtn" class="action-btn btn-bet" onclick="handleAction()">PLACE BET</button>
         </div>
-        <button id="mainBtn" class="action-btn btn-bet" onclick="handleAction()">PLACE BET</button>
+    </div>
+
+    <!-- DEPOSIT SECTION -->
+    <div id="deposit-section" class="section">
+        <div class="deposit-card">
+            <h3>Add Funds (Deposit)</h3>
+            <label style="font-size: 12px; color: #8899a6;">Select Payment Method:</label>
+            <select id="payMethod" class="method-select">
+                <option value="EasyPaisa">EasyPaisa</option>
+                <option value="JazzCash">JazzCash</option>
+                <option value="Local Bank Transfer">Local Bank 🏦</option>
+                <option value="USDT (TRC20)">USDT (TRC20 Crypto)</option>
+            </select>
+            
+            <div class="instructions">
+                <strong>Account Details for Transfer:</strong><br>
+                Account Title: <b>Aviator Official Hub</b><br>
+                Account/IBAN/Wallet: <b>0300-1234567 / PK65SCBL000000123456</b><br>
+                <i>(Deposit karne ke baad transaction ID yahan enter karein)</i>
+            </div>
+
+            <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount in PKR" style="width:100%; margin-bottom:10px;">
+            <input type="text" id="trxId" class="bet-input" placeholder="Enter Transaction ID / Hash" style="width:100%; margin-bottom:10px;">
+            
+            <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT REQUEST</button>
+        </div>
     </div>
 
     <script>
@@ -57,18 +106,25 @@
         if (tg) { tg.ready(); tg.expand(); }
 
         const socket = io(window.location.origin);
-        let userState = { balance: 1000 };
+        let userState = { balance: 0 };
         let currentStatus = 'WAITING';
         let hasBet = false;
 
         socket.on('connect', () => {
-            socket.emit('init_user', tg?.initDataUnsafe?.user || { id: 'demo_user', first_name: 'Demo Player' });
+            const userData = tg?.initDataUnsafe?.user || { id: 'test_user_' + Math.floor(Math.random()*1000), first_name: 'Test Player' };
+            socket.emit('init_user', userData);
         });
 
         socket.on('user_data', (data) => {
             userState = data;
             document.getElementById('balance').innerText = data.balance.toFixed(2);
             document.getElementById('username').innerText = data.name;
+        });
+
+        socket.on('deposit_notice', (data) => {
+            alert(data.msg);
+            document.getElementById('depAmount').value = '';
+            document.getElementById('trxId').value = '';
         });
 
         socket.on('game_state', (data) => {
@@ -98,7 +154,7 @@
             if (hasBet) {
                 const currentAmount = parseFloat(document.getElementById('betAmount').value) || 0;
                 const winEst = (currentAmount * data.multiplier).toFixed(2);
-                document.getElementById('mainBtn').innerText = `CASHOUT (Rs. ${winEst})`;
+                document.getElementById('mainBtn').innerText = `CASHOUT (PKR ${winEst})`;
             }
         });
 
@@ -113,14 +169,33 @@
 
         socket.on('cashout_success', (data) => {
             hasBet = false;
-            alert(`Cashed out successfully at ${data.multiplier}x! Won Rs. ${data.winAmount}`);
+            alert(`Cashed out successfully at ${data.multiplier}x! Won PKR ${data.winAmount}`);
             updateButton('CASHED OUT', true);
         });
 
         socket.on('error_msg', (msg) => alert(msg));
 
+        function switchTab(tabName, btn) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabName + '-section').classList.add('active');
+            btn.classList.add('active');
+        }
+
         function setBet(val) {
             document.getElementById('betAmount').value = val;
+        }
+
+        function submitDeposit() {
+            const method = document.getElementById('payMethod').value;
+            const amount = document.getElementById('depAmount').value;
+            const trxId = document.getElementById('trxId').value;
+
+            if(!amount || !trxId) {
+                alert('Please enter amount and transaction ID/Hash!');
+                return;
+            }
+            socket.emit('request_deposit', { method, amount, trxId });
         }
 
         function handleAction() {
