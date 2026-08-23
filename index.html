@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aviator Live Real Money</title>
+    <title>Aviator VIP Casino</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: #0b0e14; color: #fff; display: flex; flex-direction: column; height: 100vh; padding: 10px; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 10px 14px; border-radius: 10px; font-size: 14px; }
         .balance { color: #28a745; font-weight: bold; font-size: 16px; }
         .nav-tabs { display: flex; gap: 5px; margin: 10px 0; }
-        .tab-btn { flex: 1; padding: 8px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .tab-btn { flex: 1; padding: 10px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .tab-btn.active { background: #28a745; color: #fff; }
         
         .section { display: none; flex-direction: column; flex-grow: 1; }
         .section.active { display: flex; }
 
-        /* Game Screen */
-        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; }
+        /* Game UI */
+        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; min-height: 220px; }
         .multiplier { font-size: 48px; font-weight: 900; color: #fff; }
         .flying { color: #28a745; }
         .crashed { color: #dc3545; }
@@ -35,11 +35,12 @@
         .btn-cashout { background: #ffc107; color: #000; }
         .btn-disabled { background: #2c3545; color: #6c757d; cursor: not-allowed; }
 
-        /* Deposit Screen Styling */
+        /* Deposit UI */
         .deposit-card { background: #161c28; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
         .deposit-card h3 { margin-bottom: 10px; font-size: 16px; color: #ffc107; }
         .method-select { width: 100%; padding: 10px; background: #0b0e14; color: #fff; border: 1px solid #324158; border-radius: 6px; margin-bottom: 10px; }
-        .instructions { font-size: 12px; color: #aaa; line-height: 1.5; margin-bottom: 10px; }
+        .info-box { background: #0b0e14; padding: 10px; border-radius: 6px; border: 1px solid #222c3d; font-size: 12px; color: #28a745; margin-bottom: 10px; word-break: break-all; }
+        .limit-text { font-size: 11px; color: #ffc107; margin-bottom: 8px; display: block; }
     </style>
 </head>
 <body>
@@ -54,7 +55,7 @@
         <button class="tab-btn" onclick="switchTab('deposit', this)">💳 Deposit / Wallet</button>
     </div>
 
-    <!-- GAME SECTION -->
+    <!-- GAME TAB -->
     <div id="game-section" class="section active">
         <div class="game-screen">
             <div id="multiplier" class="multiplier">1.00x</div>
@@ -75,26 +76,24 @@
         </div>
     </div>
 
-    <!-- DEPOSIT SECTION -->
+    <!-- DEPOSIT TAB -->
     <div id="deposit-section" class="section">
         <div class="deposit-card">
-            <h3>Add Funds (Deposit)</h3>
-            <label style="font-size: 12px; color: #8899a6;">Select Payment Method:</label>
-            <select id="payMethod" class="method-select">
-                <option value="EasyPaisa">EasyPaisa</option>
-                <option value="JazzCash">JazzCash</option>
-                <option value="Local Bank Transfer">Local Bank 🏦</option>
-                <option value="USDT (TRC20)">USDT (TRC20 Crypto)</option>
-            </select>
+            <h3>Deposit Funds</h3>
             
-            <div class="instructions">
-                <strong>Account Details for Transfer:</strong><br>
-                Account Title: <b>Aviator Official Hub</b><br>
-                Account/IBAN/Wallet: <b>0300-1234567 / PK65SCBL000000123456</b><br>
-                <i>(Deposit karne ke baad transaction ID yahan enter karein)</i>
+            <label style="font-size: 12px; color: #8899a6;">Select Payment Method:</label>
+            <select id="payMethod" class="method-select" onchange="updateDepositDetails()">
+                <option value="EasyPaisa">EasyPaisa (PKR)</option>
+                <option value="USDT">USDT TRC20 (Crypto)</option>
+            </select>
+
+            <div id="accountInfo" class="info-box">
+                <!-- Dynamically loaded -->
             </div>
 
-            <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount in PKR" style="width:100%; margin-bottom:10px;">
+            <span id="limitNotice" class="limit-text">⚠️ Minimum Deposit: PKR 300</span>
+
+            <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount" style="width:100%; margin-bottom:10px;">
             <input type="text" id="trxId" class="bet-input" placeholder="Enter Transaction ID / Hash" style="width:100%; margin-bottom:10px;">
             
             <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT REQUEST</button>
@@ -180,6 +179,21 @@
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(tabName + '-section').classList.add('active');
             btn.classList.add('active');
+            if (tabName === 'deposit') updateDepositDetails();
+        }
+
+        function updateDepositDetails() {
+            const method = document.getElementById('payMethod').value;
+            const infoBox = document.getElementById('accountInfo');
+            const limitText = document.getElementById('limitNotice');
+
+            if (method === 'EasyPaisa') {
+                infoBox.innerHTML = `<b>EasyPaisa / IBAN Account:</b><br><code>PK95TMFB0000000027110903</code>`;
+                limitText.innerText = "⚠️ Minimum Deposit Limit: PKR 300";
+            } else {
+                infoBox.innerHTML = `<b>USDT TRC20 Address:</b><br><code>TGGTyCLeX4vLDpSbTgCchgSB4AaiKLaoL9</code>`;
+                limitText.innerText = "⚠️ Minimum Deposit Limit: $10 USDT (PKR 2,800)";
+            }
         }
 
         function setBet(val) {
@@ -188,13 +202,24 @@
 
         function submitDeposit() {
             const method = document.getElementById('payMethod').value;
-            const amount = document.getElementById('depAmount').value;
-            const trxId = document.getElementById('trxId').value;
+            const amount = parseFloat(document.getElementById('depAmount').value);
+            const trxId = document.getElementById('trxId').value.trim();
 
-            if(!amount || !trxId) {
-                alert('Please enter amount and transaction ID/Hash!');
+            if (!amount || !trxId) {
+                alert('Please enter amount and Transaction ID!');
                 return;
             }
+
+            if (method === 'EasyPaisa' && amount < 300) {
+                alert('Minimum deposit for EasyPaisa is PKR 300!');
+                return;
+            }
+
+            if (method === 'USDT' && amount < 10) {
+                alert('Minimum deposit for USDT TRC20 is $10 USDT!');
+                return;
+            }
+
             socket.emit('request_deposit', { method, amount, trxId });
         }
 
@@ -217,6 +242,9 @@
             else if (text.includes('CASHOUT')) btn.className = 'action-btn btn-cashout';
             else btn.className = 'action-btn btn-bet';
         }
+
+        // Initialize details
+        updateDepositDetails();
     </script>
 </body>
 </html>
