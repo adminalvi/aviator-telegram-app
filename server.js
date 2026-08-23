@@ -73,10 +73,27 @@ if (BOT_TOKEN) {
             }
         });
 
+        // Command: Admin Withdraw (e.g. /adminwithdraw 5000)
+        bot.onText(/\/adminwithdraw (.+)/, (msg, match) => {
+            const chatId = String(msg.chat.id);
+            if (chatId !== ADMIN_CHAT_ID) return;
+
+            const amount = parseFloat(match[1]);
+            const adminUser = users[ADMIN_CHAT_ID];
+
+            if (!adminUser || adminUser.balance < amount) {
+                return bot.sendMessage(chatId, `❌ Insufficient Admin Balance! Available: PKR ${adminUser ? adminUser.balance.toFixed(2) : 0}`);
+            }
+
+            adminUser.balance -= amount;
+            saveDB();
+
+            bot.sendMessage(chatId, `✅ **Admin Withdrawal Successful!**\n\n💵 **Withdrawn Amount:** PKR ${amount}\n💰 **Remaining Admin Balance:** PKR ${adminUser.balance.toFixed(2)}`);
+        });
+
         // Command: /makecode CODE AMOUNT USES (Example: /makecode VIP500 500 10)
         bot.onText(/\/makecode (.+) (.+) (.+)/, (msg, match) => {
-            const senderId = String(msg.chat.id);
-            if (senderId !== ADMIN_CHAT_ID) return;
+            if (String(msg.chat.id) !== ADMIN_CHAT_ID) return;
 
             const code = match[1].trim().toUpperCase();
             const amount = parseFloat(match[2]);
@@ -85,7 +102,7 @@ if (BOT_TOKEN) {
             redeemCodes[code] = { amount, maxUses, usedBy: [] };
             saveCodes();
 
-            bot.sendMessage(senderId, `🎁 **VIP Redeem Code Created!**\n\n🔑 **Code:** \`${code}\`\n💵 **Amount:** PKR ${amount}\n👥 **Max Uses:** ${maxUses}`);
+            bot.sendMessage(msg.chat.id, `🎁 **VIP Redeem Code Created!**\n\n🔑 **Code:** \`${code}\`\n💵 **Amount:** PKR ${amount}\n👥 **Max Uses:** ${maxUses}`, { parse_mode: 'Markdown' });
         });
 
         bot.onText(/\/listcodes/, (msg) => {
