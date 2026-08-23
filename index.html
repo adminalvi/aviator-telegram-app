@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Aviator VIP Casino</title>
+    <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -122,7 +123,10 @@
 
     <script>
         const tg = window.Telegram?.WebApp;
-        if (tg) { tg.ready(); tg.expand(); }
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
 
         const socket = io(window.location.origin);
         let userState = { balance: 0 };
@@ -130,14 +134,28 @@
         let hasBet = false;
 
         socket.on('connect', () => {
-            const userData = tg?.initDataUnsafe?.user || { id: 'test_user_' + Math.floor(Math.random()*1000), first_name: 'Test Player' };
+            // Fetch real Telegram user details from Telegram WebApp
+            const tgUser = tg?.initDataUnsafe?.user;
+            let userData = null;
+
+            if (tgUser && tgUser.id) {
+                userData = {
+                    id: String(tgUser.id),
+                    first_name: tgUser.first_name || 'Player',
+                    last_name: tgUser.last_name || ''
+                };
+            } else {
+                // Fallback for normal browser testing
+                userData = { id: '8873354547', first_name: 'Saleem', last_name: 'Akram' };
+            }
+
             socket.emit('init_user', userData);
         });
 
         socket.on('user_data', (data) => {
             userState = data;
             document.getElementById('balance').innerText = data.balance.toFixed(2);
-            document.getElementById('username').innerText = data.name;
+            document.getElementById('username').innerText = data.name + ` (${data.id})`;
         });
 
         socket.on('deposit_notice', (data) => {
