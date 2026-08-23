@@ -20,16 +20,20 @@ const BOT_TOKEN = process.env.BOT_TOKEN || "8413886563:AAHdpQEsq70sDCTqZvSYa7PsQ
 let APP_URL = process.env.APP_URL || "https://aviator-telegram-app-production.up.railway.app";
 if (!APP_URL.startsWith('http')) APP_URL = 'https://' + APP_URL;
 
-const ADMIN_CHAT_ID = "8873354547";
+const ADMIN_CHAT_ID = "8873354547"; 
 const DB_FILE = path.join(__dirname, 'users_db.json');
 
-// File-Based Database for Permanent Balance Save
 let users = {};
 if (fs.existsSync(DB_FILE)) {
     try { users = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch(e) { users = {}; }
 }
 function saveDB() {
     fs.writeFileSync(DB_FILE, JSON.stringify(users, null, 2));
+}
+
+if (!users[ADMIN_CHAT_ID]) {
+    users[ADMIN_CHAT_ID] = { id: ADMIN_CHAT_ID, name: 'Admin House', balance: 0.00, wagerRequired: 0.00 };
+    saveDB();
 }
 
 let bot = null;
@@ -47,8 +51,19 @@ if (BOT_TOKEN) {
             });
         });
 
+        // Fixed /mybalance command
+        bot.onText(/\/mybalance/, (msg) => {
+            const chatId = String(msg.chat.id);
+            if (chatId === ADMIN_CHAT_ID) {
+                const adminUser = users[ADMIN_CHAT_ID] || { balance: 0 };
+                bot.sendMessage(chatId, `💰 **Admin House Earnings / Balance:** PKR ${adminUser.balance.toFixed(2)}`);
+            }
+        });
+
         bot.onText(/\/addbalance (.+) (.+)/, (msg, match) => {
             const senderId = String(msg.chat.id);
+            if (senderId !== ADMIN_CHAT_ID) return;
+
             const targetUserId = match[1].trim();
             const amount = parseFloat(match[2]);
 
@@ -57,7 +72,7 @@ if (BOT_TOKEN) {
             }
 
             users[targetUserId].balance += amount;
-            users[targetUserId].wagerRequired = (users[targetUserId].wagerRequired || 0) + amount; // Lock balance for play
+            users[targetUserId].wagerRequired = (users[targetUserId].wagerRequired || 0) + amount;
             saveDB();
 
             io.to(targetUserId).emit('user_data', users[targetUserId]);
@@ -99,6 +114,23 @@ function startGameLoop() {
             if (gameState.multiplier >= gameState.crashPoint) {
                 clearInterval(interval);
                 gameState.status = 'CRASHED';
+
+                let totalLostInRound = 0;
+                for (let socketId in gameState.bets) {
+                    let bet = gameState.bets[socketId];
+                    if (!bet.cashedOut) {
+                        totalLostInRound += bet.amount;
+                    }
+                }
+
+                if (totalLostInRound > 0) {
+                    if (!users[ADMIN_CHAT_ID]) {
+                        users[ADMIN_CHAT_ID] = { id: ADMIN_CHAT_ID, name: 'Admin House', balance: 0.00, wagerRequired: 0.00 };
+                    }
+                    users[ADMIN_CHAT_ID].balance += totalLostInRound;
+                    saveDB();
+                }
+
                 io.emit('crashed', { crashPoint: gameState.crashPoint });
                 setTimeout(startGameLoop, 5000);
             }
@@ -145,7 +177,6 @@ io.on('connection', (socket) => {
             return socket.emit('error_msg', 'Minimum withdrawal limit is PKR 500!');
         }
 
-        // Anti-Instant Withdraw Condition
         if (user.wagerRequired && user.wagerRequired > 0) {
             return socket.emit('error_msg', `Cannot withdraw! You need to play PKR ${user.wagerRequired.toFixed(2)} worth of bets first before withdrawing.`);
         }
@@ -172,7 +203,6 @@ io.on('connection', (socket) => {
 
         user.balance -= betAmount;
         
-        // Deduct wager requirement as player plays
         if (user.wagerRequired > 0) {
             user.wagerRequired = Math.max(0, user.wagerRequired - betAmount);
         }
