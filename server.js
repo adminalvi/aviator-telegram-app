@@ -1,86 +1,3 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const path = require('path');
-const TelegramBot = require('node-telegram-bot-api');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname)));
-
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
-
-const BOT_TOKEN = process.env.BOT_TOKEN || "8413886563:AAHdpQEsq70sDCTqZvSYa7PsQ4M500URqjA";
-let APP_URL = process.env.APP_URL || "https://aviator-telegram-app-production.up.railway.app";
-if (!APP_URL.startsWith('http')) APP_URL = 'https://' + APP_URL;
-
-const users = {}; 
-let bot = null;
-const ADMIN_CHAT_ID = "8873354547"; 
-
-if (BOT_TOKEN) {
-    try {
-        bot = new TelegramBot(BOT_TOKEN, { polling: true });
-        
-        bot.onText(/\/start/, (msg) => {
-            const chatId = msg.chat.id;
-            bot.sendMessage(chatId, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${chatId}\`\n\nDeposit or Withdraw funds directly inside the app!`, {
-                parse_mode: 'Markdown',
-                reply_markup: {
-                    inline_keyboard: [[{ text: "🎮 Open Aviator Game", web_app: { url: APP_URL } }]]
-                }
-            });
-        });
-
-        bot.onText(/\/addbalance (.+) (.+)/, (msg, match) => {
-            const senderId = String(msg.chat.id);
-            const targetUserId = match[1].trim();
-            const amount = parseFloat(match[2]);
-
-            if (!users[targetUserId]) {
-                users[targetUserId] = { id: targetUserId, name: 'Player', balance: 0.00 };
-            }
-
-            users[targetUserId].balance += amount;
-            io.to(targetUserId).emit('user_data', users[targetUserId]);
-
-            bot.sendMessage(senderId, `✅ **Success!** Added PKR ${amount} to User ID: \`${targetUserId}\`.\nNew Balance: PKR ${users[targetUserId].balance}`);
-            
-            try {
-                bot.sendMessage(targetUserId, `🎉 **Deposit Approved!** PKR ${amount} has been added to your game account. Enjoy!`);
-            } catch(e) {}
-        });
-
-        console.log("✅ Telegram Bot initialized!");
-    } catch (e) {
-        console.error("Bot Error:", e.message);
-    }
-}
-
-let gameState = { status: 'WAITING', multiplier: 1.00, crashPoint: 1.00, bets: {} };
-
-// FAST & STRICT CASINO ALGORITHM (House Advantage)
-function generateCrashPoint() {
-    const rand = Math.random();
-    // 60% chance to crash extremely early (1.01x - 1.50x)
-    if (rand < 0.60) {
-        return parseFloat((1.01 + Math.random() * 0.49).toFixed(2));
-    } 
-    // 30% chance to crash mid range (1.51x - 2.50x)
-    else if (rand < 0.90) {
-        return parseFloat((1.51 + Math.random() * 0.99).toFixed(2));
-    } 
-    // 10% high payout round (2.51x - 10.00x)
-    else {
-        return parseFloat((2.51 + Math.random() * 7.49).toFixed(2));
-    }
-}
-
 function startGameLoop() {
     gameState.status = 'WAITING';
     gameState.multiplier = 1.00;
@@ -92,101 +9,17 @@ function startGameLoop() {
         gameState.crashPoint = generateCrashPoint();
         io.emit('game_started', { status: 'FLYING' });
 
-        // SPEED INCREASED: 50ms instead of 100ms
+        // SPEED SET TO 75ms (Smooth & Balanced Speed)
         let interval = setInterval(() => {
-            gameState.multiplier = parseFloat((gameState.multiplier + 0.03).toFixed(2));
+            gameState.multiplier = parseFloat((gameState.multiplier + 0.02).toFixed(2));
             io.emit('tick', { multiplier: gameState.multiplier });
 
             if (gameState.multiplier >= gameState.crashPoint) {
                 clearInterval(interval);
                 gameState.status = 'CRASHED';
                 io.emit('crashed', { crashPoint: gameState.crashPoint });
-                setTimeout(startGameLoop, 4000); // Quick 4-second wait for next round
+                setTimeout(startGameLoop, 4000); 
             }
-        }, 50); 
+        }, 75); 
     }, 4000);
 }
-
-io.on('connection', (socket) => {
-    socket.on('init_user', (tgUser) => {
-        const userId = tgUser?.id ? String(tgUser.id) : socket.id;
-        const name = tgUser?.first_name ? `${tgUser.first_name} ${tgUser.last_name || ''}` : 'Player';
-
-        if (!users[userId]) {
-            users[userId] = { id: userId, name: name.trim(), balance: 0.00 };
-        }
-        socket.userId = userId;
-        socket.join(userId);
-        socket.emit('user_data', users[userId]);
-        socket.emit('game_state', { status: gameState.status, multiplier: gameState.multiplier });
-    });
-
-    socket.on('request_deposit', (data) => {
-        const userId = socket.userId;
-        socket.emit('deposit_notice', { 
-            msg: `Deposit request for PKR ${data.amount} via ${data.method} submitted! Admin will verify Transaction ID: ${data.trxId}` 
-        });
-
-        if (bot) {
-            bot.sendMessage(ADMIN_CHAT_ID || userId, `📥 **NEW DEPOSIT REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${data.amount}\n💳 **Method:** ${data.method}\n🧾 **TRX ID:** \`${data.trxId}\`\n\nTo approve send:\n\`/addbalance ${userId} ${data.amount}\``, { parse_mode: 'Markdown' });
-        }
-    });
-
-    socket.on('request_withdraw', (data) => {
-        const userId = socket.userId;
-        const user = users[userId];
-        const withdrawAmount = parseFloat(data.amount);
-
-        if (!user || user.balance < withdrawAmount) {
-            return socket.emit('error_msg', 'Insufficient balance for withdrawal!');
-        }
-
-        if (withdrawAmount < 500) {
-            return socket.emit('error_msg', 'Minimum withdrawal limit is PKR 500!');
-        }
-
-        user.balance -= withdrawAmount;
-        socket.emit('user_data', user);
-
-        socket.emit('withdraw_notice', { 
-            msg: `Withdrawal request for PKR ${withdrawAmount} submitted successfully! Funds will be transferred shortly.` 
-        });
-
-        if (bot) {
-            bot.sendMessage(ADMIN_CHAT_ID || userId, `📤 **NEW WITHDRAWAL REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${withdrawAmount}\n💳 **Method:** ${data.method}\n🏦 **Account Details:** \`${data.accountDetails}\`\n\nPlease transfer PKR ${withdrawAmount} to the user!`, { parse_mode: 'Markdown' });
-        }
-    });
-
-    socket.on('place_bet', (data) => {
-        const user = users[socket.userId];
-        const betAmount = parseFloat(data.amount);
-
-        if (gameState.status !== 'WAITING') return socket.emit('error_msg', 'Round started! Wait for next round.');
-        if (!user || user.balance < betAmount || betAmount <= 0) return socket.emit('error_msg', 'Insufficient balance!');
-
-        user.balance -= betAmount;
-        gameState.bets[socket.id] = { userId: socket.userId, amount: betAmount, cashedOut: false };
-
-        socket.emit('user_data', user);
-        socket.emit('bet_confirmed', { amount: betAmount });
-    });
-
-    socket.on('cashout', () => {
-        const bet = gameState.bets[socket.id];
-        const user = users[socket.userId];
-
-        if (gameState.status !== 'FLYING' || !bet || bet.cashedOut) return;
-
-        bet.cashedOut = true;
-        const winAmount = parseFloat((bet.amount * gameState.multiplier).toFixed(2));
-        user.balance += winAmount;
-
-        socket.emit('user_data', user);
-        socket.emit('cashout_success', { winAmount, multiplier: gameState.multiplier });
-    });
-});
-
-startGameLoop();
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
