@@ -21,8 +21,6 @@ if (!APP_URL.startsWith('http')) APP_URL = 'https://' + APP_URL;
 
 const users = {}; 
 let bot = null;
-
-// SET YOUR TELEGRAM CHAT ID HERE TO RECEIVE WITHDRAW NOTIFICATIONS DIRECTLY
 const ADMIN_CHAT_ID = "8873354547"; 
 
 if (BOT_TOKEN) {
@@ -39,7 +37,6 @@ if (BOT_TOKEN) {
             });
         });
 
-        // ADMIN COMMAND TO ADD BALANCE: /addbalance USER_ID AMOUNT
         bot.onText(/\/addbalance (.+) (.+)/, (msg, match) => {
             const senderId = String(msg.chat.id);
             const targetUserId = match[1].trim();
@@ -65,13 +62,23 @@ if (BOT_TOKEN) {
     }
 }
 
-// Game Loop Architecture
 let gameState = { status: 'WAITING', multiplier: 1.00, crashPoint: 1.00, bets: {} };
 
+// FAST & STRICT CASINO ALGORITHM (House Advantage)
 function generateCrashPoint() {
-    const e = Math.pow(2, 52);
-    const h = Math.floor(Math.random() * e);
-    return Math.min(Math.max(1.01, Math.floor((100 * e - h) / (e - h)) / 100), 100.00);
+    const rand = Math.random();
+    // 60% chance to crash extremely early (1.01x - 1.50x)
+    if (rand < 0.60) {
+        return parseFloat((1.01 + Math.random() * 0.49).toFixed(2));
+    } 
+    // 30% chance to crash mid range (1.51x - 2.50x)
+    else if (rand < 0.90) {
+        return parseFloat((1.51 + Math.random() * 0.99).toFixed(2));
+    } 
+    // 10% high payout round (2.51x - 10.00x)
+    else {
+        return parseFloat((2.51 + Math.random() * 7.49).toFixed(2));
+    }
 }
 
 function startGameLoop() {
@@ -85,18 +92,19 @@ function startGameLoop() {
         gameState.crashPoint = generateCrashPoint();
         io.emit('game_started', { status: 'FLYING' });
 
+        // SPEED INCREASED: 50ms instead of 100ms
         let interval = setInterval(() => {
-            gameState.multiplier = parseFloat((gameState.multiplier + 0.01).toFixed(2));
+            gameState.multiplier = parseFloat((gameState.multiplier + 0.03).toFixed(2));
             io.emit('tick', { multiplier: gameState.multiplier });
 
             if (gameState.multiplier >= gameState.crashPoint) {
                 clearInterval(interval);
                 gameState.status = 'CRASHED';
                 io.emit('crashed', { crashPoint: gameState.crashPoint });
-                setTimeout(startGameLoop, 5000);
+                setTimeout(startGameLoop, 4000); // Quick 4-second wait for next round
             }
-        }, 100);
-    }, 5000);
+        }, 50); 
+    }, 4000);
 }
 
 io.on('connection', (socket) => {
@@ -137,7 +145,6 @@ io.on('connection', (socket) => {
             return socket.emit('error_msg', 'Minimum withdrawal limit is PKR 500!');
         }
 
-        // Deduct balance immediately upon request
         user.balance -= withdrawAmount;
         socket.emit('user_data', user);
 
@@ -145,7 +152,6 @@ io.on('connection', (socket) => {
             msg: `Withdrawal request for PKR ${withdrawAmount} submitted successfully! Funds will be transferred shortly.` 
         });
 
-        // Send alert to Admin on Telegram
         if (bot) {
             bot.sendMessage(ADMIN_CHAT_ID || userId, `📤 **NEW WITHDRAWAL REQUEST!**\n\n👤 **User ID:** \`${userId}\`\n💵 **Amount:** PKR ${withdrawAmount}\n💳 **Method:** ${data.method}\n🏦 **Account Details:** \`${data.accountDetails}\`\n\nPlease transfer PKR ${withdrawAmount} to the user!`, { parse_mode: 'Markdown' });
         }
