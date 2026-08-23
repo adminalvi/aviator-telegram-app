@@ -9,16 +9,16 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: #0b0e14; color: #fff; display: flex; flex-direction: column; height: 100vh; padding: 10px; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 10px 14px; border-radius: 10px; font-size: 14px; }
-        .balance { color: #28a745; font-weight: bold; font-size: 16px; }
-        .nav-tabs { display: flex; gap: 5px; margin: 10px 0; }
-        .tab-btn { flex: 1; padding: 10px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+        .vip-badge { background: #ffc107; color: #000; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 11px; margin-left: 5px; }
+        .balance { color: #28a745; font-weight: bold; font-size: 15px; }
+        .nav-tabs { display: flex; gap: 4px; margin: 10px 0; }
+        .tab-btn { flex: 1; padding: 10px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; }
         .tab-btn.active { background: #28a745; color: #fff; }
         
-        .section { display: none; flex-direction: column; flex-grow: 1; }
+        .section { display: none; flex-direction: column; flex-grow: 1; overflow-y: auto; }
         .section.active { display: flex; }
 
-        /* Game UI Canvas */
         .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; min-height: 250px; position: relative; overflow: hidden; }
         #canvas { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 1; }
         .game-info { z-index: 2; text-align: center; }
@@ -38,28 +38,31 @@
         .btn-cashout { background: #ffc107; color: #000; }
         .btn-disabled { background: #2c3545; color: #6c757d; cursor: not-allowed; }
 
-        /* Wallet UI */
         .card { background: #161c28; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
-        .card h3 { margin-bottom: 10px; font-size: 16px; color: #ffc107; }
+        .card h3 { margin-bottom: 10px; font-size: 15px; color: #ffc107; }
         .method-select { width: 100%; padding: 10px; background: #0b0e14; color: #fff; border: 1px solid #324158; border-radius: 6px; margin-bottom: 10px; }
         .info-box { background: #0b0e14; padding: 10px; border-radius: 6px; border: 1px solid #222c3d; font-size: 12px; color: #28a745; margin-bottom: 10px; word-break: break-all; }
         .limit-text { font-size: 11px; color: #ffc107; margin-bottom: 8px; display: block; }
+        
+        .guide-box { background: #131924; border: 1px solid #253347; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 12px; color: #d1d5db; line-height: 1.5; }
+        .guide-box h4 { color: #ffc107; font-size: 13px; margin-bottom: 6px; }
     </style>
 </head>
 <body>
 
     <div class="top-bar">
-        <div id="username">Loading...</div>
+        <div><span id="username">Loading...</span> <span id="vipTag" class="vip-badge">🥉 BRONZE</span></div>
         <div class="balance">PKR <span id="balance">0.00</span></div>
     </div>
 
     <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchTab('game', this)">🎮 Game</button>
+        <button class="tab-btn" onclick="switchTab('redeem', this)">🎁 Redeem</button>
         <button class="tab-btn" onclick="switchTab('deposit', this)">💳 Deposit</button>
         <button class="tab-btn" onclick="switchTab('withdraw', this)">🏧 Withdraw</button>
     </div>
 
-    <!-- GAME TAB -->
+    <!-- GAME SECTION -->
     <div id="game-section" class="section active">
         <div class="game-screen">
             <canvas id="canvas"></canvas>
@@ -83,36 +86,51 @@
         </div>
     </div>
 
-    <!-- DEPOSIT TAB -->
+    <!-- REDEEM VIP CODE SECTION -->
+    <div id="redeem-section" class="section">
+        <div class="card">
+            <h3>🎁 VIP Gift Code Claim</h3>
+            <div class="guide-box">
+                <h4>📌 Promo / Gift Code کا طریقہ:</h4>
+                <p>ٹیلی گرام گروپ یا چینل سے ملنے والا VIP Code نیچے درج کریں اور **Claim Bonus** پر کلک کریں۔ بونص رقم فوراً آپ کے بیلنس میں شامل ہو جائے گی۔</p>
+            </div>
+            <input type="text" id="redeemInput" class="bet-input" placeholder="Enter VIP Code (e.g. BONUS100)" style="width:100%; margin-bottom:12px; text-transform:uppercase;">
+            <button class="action-btn btn-cashout" onclick="claimRedeem()">CLAIM BONUS</button>
+        </div>
+    </div>
+
+    <!-- DEPOSIT SECTION -->
     <div id="deposit-section" class="section">
         <div class="card">
-            <h3>Deposit Funds</h3>
-            <label style="font-size: 12px; color: #8899a6;">Select Payment Method:</label>
+            <h3>💳 Deposit Funds (ڈیپازٹ کا طریقہ)</h3>
+            <div class="guide-box">
+                <h4>📌 ڈیپازٹ کرنے کا آسان طریقہ:</h4>
+                <p>1. EasyPaisa یا USDT منتخب کریں۔<br>2. رقم بھیج کر Trx ID کاپی کریں۔<br>3. نیچے رقم اور Trx ID لکھ کر Submit کر دیں۔</p>
+            </div>
             <select id="payMethod" class="method-select" onchange="updateDepositDetails()">
                 <option value="EasyPaisa">EasyPaisa (PKR)</option>
                 <option value="USDT">USDT TRC20 (Crypto)</option>
             </select>
             <div id="accountInfo" class="info-box"></div>
-            <span id="limitNotice" class="limit-text">⚠️ Minimum Deposit: PKR 300</span>
+            <span class="limit-text">⚠️ Minimum Deposit: PKR 300</span>
             <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount" style="width:100%; margin-bottom:10px;">
             <input type="text" id="trxId" class="bet-input" placeholder="Enter Transaction ID / Hash" style="width:100%; margin-bottom:10px;">
-            <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT REQUEST</button>
+            <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT</button>
         </div>
     </div>
 
-    <!-- WITHDRAW TAB -->
+    <!-- WITHDRAW SECTION -->
     <div id="withdraw-section" class="section">
         <div class="card">
-            <h3>Withdraw Winnings</h3>
-            <label style="font-size: 12px; color: #8899a6;">Select Withdrawal Method:</label>
+            <h3>🏧 Withdraw Winnings</h3>
             <select id="withMethod" class="method-select">
                 <option value="EasyPaisa">EasyPaisa</option>
                 <option value="JazzCash">JazzCash</option>
                 <option value="USDT TRC20">USDT TRC20</option>
             </select>
-            <span class="limit-text">⚠️ Minimum Withdrawal: PKR 500 (Must play games before withdraw)</span>
+            <span class="limit-text">⚠️ Minimum Withdrawal: PKR 500</span>
             <input type="number" id="withAmount" class="bet-input" placeholder="Enter Amount (Min PKR 500)" style="width:100%; margin-bottom:10px;">
-            <input type="text" id="withAccount" class="bet-input" placeholder="Enter Account Title & Number / Wallet" style="width:100%; margin-bottom:10px;">
+            <input type="text" id="withAccount" class="bet-input" placeholder="Account Title & Number" style="width:100%; margin-bottom:10px;">
             <button class="action-btn btn-withdraw" onclick="submitWithdraw()">REQUEST WITHDRAWAL</button>
         </div>
     </div>
@@ -122,12 +140,10 @@
         if (tg) { tg.ready(); tg.expand(); }
 
         const socket = io(window.location.origin);
-        let userState = { balance: 0 };
         let currentStatus = 'WAITING';
         let hasBet = false;
         let flightProgress = 0;
 
-        // Canvas Red Plane Rendering
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
@@ -143,7 +159,6 @@
             const endX = Math.min(canvas.width - 40, 20 + progress * (canvas.width - 60));
             const endY = Math.max(40, canvas.height - 20 - progress * (canvas.height - 60));
 
-            // Curve Line
             ctx.beginPath();
             ctx.moveTo(startX, startY);
             ctx.quadraticCurveTo(startX + (endX - startX)/2, startY, endX, endY);
@@ -151,7 +166,6 @@
             ctx.lineWidth = 4;
             ctx.stroke();
 
-            // Plane Icon ✈️
             ctx.font = '24px serif';
             ctx.fillText(crashed ? '💥' : '✈️', endX - 10, endY + 8);
         }
@@ -163,13 +177,12 @@
         });
 
         socket.on('user_data', (data) => {
-            userState = data;
             document.getElementById('balance').innerText = data.balance.toFixed(2);
             document.getElementById('username').innerText = data.name;
+            document.getElementById('vipTag').innerText = data.vipLevel || '🥉 BRONZE';
         });
 
         socket.on('deposit_notice', (data) => alert(data.msg));
-        socket.on('withdraw_notice', (data) => alert(data.msg));
 
         socket.on('game_state', (data) => {
             currentStatus = data.status;
@@ -237,6 +250,12 @@
             } else {
                 infoBox.innerHTML = `<b>USDT TRC20 Address:</b><br><code>TGGTyCLeX4vLDpSbTgCchgSB4AaiKLaoL9</code>`;
             }
+        }
+
+        function claimRedeem() {
+            const code = document.getElementById('redeemInput').value;
+            if (!code) return alert('Enter a VIP code!');
+            socket.emit('redeem_code', { code });
         }
 
         function setBet(val) { document.getElementById('betAmount').value = val; }
