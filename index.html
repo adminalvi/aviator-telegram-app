@@ -2,301 +2,376 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aviator VIP Casino</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aviator VIP Game</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #0b0e14; color: #fff; display: flex; flex-direction: column; height: 100vh; padding: 10px; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #161c28; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
-        .vip-badge { background: #ffc107; color: #000; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 11px; margin-left: 5px; }
-        .balance { color: #28a745; font-weight: bold; font-size: 15px; }
-        .nav-tabs { display: flex; gap: 4px; margin: 10px 0; }
-        .tab-btn { flex: 1; padding: 10px; background: #1a2233; border: none; color: #8899a6; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; }
-        .tab-btn.active { background: #28a745; color: #fff; }
-        
-        .section { display: none; flex-direction: column; flex-grow: 1; overflow-y: auto; }
-        .section.active { display: flex; }
+        body { background-color: #0e131b; color: #fff; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-        .game-screen { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 10px 0; background: #121824; border-radius: 12px; border: 1px solid #1e2738; min-height: 250px; position: relative; overflow: hidden; }
-        #canvas { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 1; }
-        .game-info { z-index: 2; text-align: center; }
-        .multiplier { font-size: 48px; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.8); }
-        .flying { color: #28a745; }
-        .crashed { color: #dc3545; }
-        .status { font-size: 12px; color: #8899a6; margin-top: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
-        
-        .controls { background: #161c28; padding: 12px; border-radius: 10px; z-index:2; }
-        .bet-presets { display: flex; gap: 6px; margin-bottom: 8px; }
-        .preset-btn { flex: 1; padding: 6px; background: #222c3d; border: 1px solid #324158; color: #fff; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
-        .input-group { display: flex; gap: 8px; margin-bottom: 8px; }
-        .bet-input { flex: 1; padding: 10px; background: #0b0e14; border: 1px solid #222c3d; color: #fff; border-radius: 6px; font-size: 14px; text-align: center; }
-        .action-btn { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; text-transform: uppercase; }
-        .btn-bet { background: #28a745; color: #fff; }
-        .btn-withdraw { background: #dc3545; color: #fff; }
-        .btn-cashout { background: #ffc107; color: #000; }
-        .btn-disabled { background: #2c3545; color: #6c757d; cursor: not-allowed; }
+        /* Top Bar */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #161d2a; border-bottom: 1px solid #232d3f; }
+        .user-info { display: flex; flex-direction: column; }
+        .username { font-weight: bold; font-size: 14px; color: #fff; }
+        .vip-badge { font-size: 11px; color: #f39c12; font-weight: bold; }
+        .balance-box { background: #000; padding: 6px 12px; border-radius: 20px; border: 1px solid #2ecc71; color: #2ecc71; font-weight: bold; font-size: 14px; }
 
-        .card { background: #161c28; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
-        .card h3 { margin-bottom: 10px; font-size: 15px; color: #ffc107; }
-        .method-select { width: 100%; padding: 10px; background: #0b0e14; color: #fff; border: 1px solid #324158; border-radius: 6px; margin-bottom: 10px; }
-        .info-box { background: #0b0e14; padding: 10px; border-radius: 6px; border: 1px solid #222c3d; font-size: 12px; color: #28a745; margin-bottom: 10px; word-break: break-all; }
-        .limit-text { font-size: 11px; color: #ffc107; margin-bottom: 8px; display: block; }
+        /* Game Screen / Canvas Area */
+        .game-container { position: relative; flex: 1; background: radial-gradient(circle at center, #1a2332 0%, #0a0d14 100%); display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* Center Multiplier & Status Display */
+        .status-overlay { position: absolute; text-align: center; z-index: 10; pointer-events: none; }
+        .multiplier-text { font-size: 55px; font-weight: 900; text-shadow: 0 0 20px rgba(231, 76, 60, 0.6); }
+        .flying { color: #fff; }
+        .crashed { color: #e74c3c; }
+        .waiting-box { font-size: 20px; font-weight: bold; color: #f39c12; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 10px; border: 1px solid #f39c12; }
+
+        /* Betting & Action Panel */
+        .controls-panel { background: #161d2a; padding: 15px; border-top-left-radius: 15px; border-top-right-radius: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #232d3f; }
+        .input-group { display: flex; gap: 10px; }
+        .bet-input { flex: 1; background: #0a0d14; border: 1px solid #232d3f; border-radius: 8px; padding: 10px; color: #fff; font-size: 16px; font-weight: bold; text-align: center; }
+        .btn { border: none; border-radius: 8px; padding: 12px 20px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
+        .btn-bet { background: #2ecc71; color: #fff; width: 100%; }
+        .btn-bet:disabled { background: #555; cursor: not-allowed; }
+        .btn-cashout { background: #f1c40f; color: #000; width: 100%; font-size: 18px; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); }
+
+        /* Actions Bar (Deposit / Withdraw / Redeem) */
+        .actions-bar { display: flex; gap: 10px; justify-content: space-between; }
+        .btn-act { flex: 1; background: #242f3e; color: #3b82f6; border: 1px solid #3b82f6; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; text-align: center; }
         
-        .guide-box { background: #131924; border: 1px solid #253347; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 12px; color: #d1d5db; line-height: 1.5; }
-        .guide-box h4 { color: #ffc107; font-size: 13px; margin-bottom: 6px; }
+        /* Modal Popup */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; }
+        .modal-content { background: #161d2a; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; display: flex; flex-direction: column; gap: 12px; border: 1px solid #232d3f; }
+        .modal-content h3 { color: #fff; font-size: 18px; text-align: center; }
+        .modal-content input { background: #0a0d14; border: 1px solid #232d3f; padding: 10px; border-radius: 6px; color: #fff; }
+        .modal-content .close-btn { background: #e74c3c; color: #fff; border: none; padding: 8px; border-radius: 6px; cursor: pointer; }
     </style>
 </head>
 <body>
 
+    <!-- Top Navigation Bar -->
     <div class="top-bar">
-        <div><span id="username">Loading...</span> <span id="vipTag" class="vip-badge">🥉 BRONZE</span></div>
-        <div class="balance">PKR <span id="balance">0.00</span></div>
-    </div>
-
-    <div class="nav-tabs">
-        <button class="tab-btn active" onclick="switchTab('game', this)">🎮 Game</button>
-        <button class="tab-btn" onclick="switchTab('redeem', this)">🎁 Redeem</button>
-        <button class="tab-btn" onclick="switchTab('deposit', this)">💳 Deposit</button>
-        <button class="tab-btn" onclick="switchTab('withdraw', this)">🏧 Withdraw</button>
-    </div>
-
-    <!-- GAME SECTION -->
-    <div id="game-section" class="section active">
-        <div class="game-screen">
-            <canvas id="canvas"></canvas>
-            <div class="game-info">
-                <div id="multiplier" class="multiplier">1.00x</div>
-                <div id="status" class="status">WAITING FOR NEXT ROUND...</div>
-            </div>
+        <div class="user-info">
+            <span class="username" id="disp-name">Player</span>
+            <span class="vip-badge" id="disp-vip">🥉 BRONZE</span>
         </div>
-
-        <div class="controls">
-            <div class="bet-presets">
-                <button class="preset-btn" onclick="setBet(50)">50</button>
-                <button class="preset-btn" onclick="setBet(100)">100</button>
-                <button class="preset-btn" onclick="setBet(500)">500</button>
-                <button class="preset-btn" onclick="setBet(1000)">1000</button>
-            </div>
-            <div class="input-group">
-                <input type="number" id="betAmount" class="bet-input" value="100" min="10">
-            </div>
-            <button id="mainBtn" class="action-btn btn-bet" onclick="handleAction()">PLACE BET</button>
+        <div class="balance-box">
+            PKR <span id="disp-balance">0.00</span>
         </div>
     </div>
 
-    <!-- REDEEM VIP CODE SECTION -->
-    <div id="redeem-section" class="section">
-        <div class="card">
-            <h3>🎁 VIP Gift Code Claim</h3>
-            <div class="guide-box">
-                <h4>📌 Promo / Gift Code کا طریقہ:</h4>
-                <p>ٹیلی گرام گروپ یا چینل سے ملنے والا VIP Code نیچے درج کریں اور **Claim Bonus** پر کلک کریں۔ بونص رقم فوراً آپ کے بیلنس میں شامل ہو جائے گی۔</p>
-            </div>
-            <input type="text" id="redeemInput" class="bet-input" placeholder="Enter VIP Code (e.g. BONUS100)" style="width:100%; margin-bottom:12px; text-transform:uppercase;">
-            <button class="action-btn btn-cashout" onclick="claimRedeem()">CLAIM BONUS</button>
+    <!-- Main Game Graphic Viewport -->
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="status-overlay">
+            <div id="multiplier" class="multiplier-text flying" style="display:none;">1.00x</div>
+            <div id="waitingBox" class="waiting-box">Next Round In: <span id="timerCount">5</span>s</div>
         </div>
     </div>
 
-    <!-- DEPOSIT SECTION -->
-    <div id="deposit-section" class="section">
-        <div class="card">
-            <h3>💳 Deposit Funds (ڈیپازٹ کا طریقہ)</h3>
-            <div class="guide-box">
-                <h4>📌 ڈیپازٹ کرنے کا آسان طریقہ:</h4>
-                <p>1. EasyPaisa یا USDT منتخب کریں۔<br>2. رقم بھیج کر Trx ID کاپی کریں۔<br>3. نیچے رقم اور Trx ID لکھ کر Submit کر دیں۔</p>
-            </div>
-            <select id="payMethod" class="method-select" onchange="updateDepositDetails()">
-                <option value="EasyPaisa">EasyPaisa (PKR)</option>
-                <option value="USDT">USDT TRC20 (Crypto)</option>
-            </select>
-            <div id="accountInfo" class="info-box"></div>
-            <span class="limit-text">⚠️ Minimum Deposit: PKR 300</span>
-            <input type="number" id="depAmount" class="bet-input" placeholder="Enter Amount" style="width:100%; margin-bottom:10px;">
-            <input type="text" id="trxId" class="bet-input" placeholder="Enter Transaction ID / Hash" style="width:100%; margin-bottom:10px;">
-            <button class="action-btn btn-bet" onclick="submitDeposit()">SUBMIT DEPOSIT</button>
+    <!-- Controls Panel -->
+    <div class="controls-panel">
+        <div class="input-group">
+            <input type="number" id="betAmount" class="bet-input" value="100" min="10" step="10">
+        </div>
+        <button id="betBtn" class="btn btn-bet">PLACE BET</button>
+        
+        <div class="actions-bar">
+            <button class="btn-act" onclick="openModal('depositModal')">📥 DEPOSIT</button>
+            <button class="btn-act" onclick="openModal('withdrawModal')">📤 WITHDRAW</button>
+            <button class="btn-act" onclick="openModal('codeModal')">🎁 REDEEM</button>
         </div>
     </div>
 
-    <!-- WITHDRAW SECTION -->
-    <div id="withdraw-section" class="section">
-        <div class="card">
-            <h3>🏧 Withdraw Winnings</h3>
-            <select id="withMethod" class="method-select">
-                <option value="EasyPaisa">EasyPaisa</option>
-                <option value="JazzCash">JazzCash</option>
-                <option value="USDT TRC20">USDT TRC20</option>
-            </select>
-            <span class="limit-text">⚠️ Minimum Withdrawal: PKR 500</span>
-            <input type="number" id="withAmount" class="bet-input" placeholder="Enter Amount (Min PKR 500)" style="width:100%; margin-bottom:10px;">
-            <input type="text" id="withAccount" class="bet-input" placeholder="Account Title & Number" style="width:100%; margin-bottom:10px;">
-            <button class="action-btn btn-withdraw" onclick="submitWithdraw()">REQUEST WITHDRAWAL</button>
+    <!-- Modals -->
+    <div id="depositModal" class="modal">
+        <div class="modal-content">
+            <h3>📥 Deposit Request</h3>
+            <input type="number" id="depAmount" placeholder="Amount (PKR)">
+            <input type="text" id="depTrx" placeholder="EasyPaisa/JazzCash Trx ID">
+            <button class="btn btn-bet" onclick="submitDeposit()">Submit Deposit</button>
+            <button class="close-btn" onclick="closeModal('depositModal')">Cancel</button>
+        </div>
+    </div>
+
+    <div id="withdrawModal" class="modal">
+        <div class="modal-content">
+            <h3>📤 Withdraw Request</h3>
+            <input type="number" id="wdAmount" placeholder="Amount (PKR)">
+            <input type="text" id="wdAccount" placeholder="EasyPaisa/JazzCash Number">
+            <button class="btn btn-bet" onclick="submitWithdraw()">Submit Withdraw</button>
+            <button class="close-btn" onclick="closeModal('withdrawModal')">Cancel</button>
+        </div>
+    </div>
+
+    <div id="codeModal" class="modal">
+        <div class="modal-content">
+            <h3>🎁 Claim Redeem Code</h3>
+            <input type="text" id="codeVal" placeholder="Enter VIP Code (e.g. BONUS100)">
+            <button class="btn btn-bet" onclick="submitCode()">Claim Code</button>
+            <button class="close-btn" onclick="closeModal('codeModal')">Cancel</button>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram?.WebApp;
-        if (tg) { tg.ready(); tg.expand(); }
+        if (tg) tg.expand();
 
-        const socket = io(window.location.origin);
-        let currentStatus = 'WAITING';
-        let hasBet = false;
-        let flightProgress = 0;
+        const socket = io();
 
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        let tgUser = tg?.initDataUnsafe?.user || { id: "8873354547", first_name: "Admin" };
+        socket.emit('init_user', tgUser);
 
-        function drawPlane(progress, crashed) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (currentStatus === 'WAITING') return;
-
-            const startX = 20;
-            const startY = canvas.height - 20;
-            const endX = Math.min(canvas.width - 40, 20 + progress * (canvas.width - 60));
-            const endY = Math.max(40, canvas.height - 20 - progress * (canvas.height - 60));
-
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.quadraticCurveTo(startX + (endX - startX)/2, startY, endX, endY);
-            ctx.strokeStyle = crashed ? '#dc3545' : '#e51029';
-            ctx.lineWidth = 4;
-            ctx.stroke();
-
-            ctx.font = '24px serif';
-            ctx.fillText(crashed ? '💥' : '✈️', endX - 10, endY + 8);
+        // Sound Effects Engine
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(freq, type = 'sine', duration = 0.1) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
         }
 
-        socket.on('connect', () => {
-            const tgUser = tg?.initDataUnsafe?.user;
-            let userData = tgUser && tgUser.id ? { id: String(tgUser.id), first_name: tgUser.first_name || 'Player' } : { id: '8873354547', first_name: 'Saleem' };
-            socket.emit('init_user', userData);
+        function playBlastSound() {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            } catch(e) {}
+        }
+
+        // State & UI References
+        let myBalance = 0;
+        let currentStatus = 'WAITING';
+        let isBetPlaced = false;
+        let timerInterval = null;
+
+        const dispName = document.getElementById('disp-name');
+        const dispVip = document.getElementById('disp-vip');
+        const dispBalance = document.getElementById('disp-balance');
+        const multText = document.getElementById('multiplier');
+        const waitingBox = document.getElementById('waitingBox');
+        const timerCount = document.getElementById('timerCount');
+        const betBtn = document.getElementById('betBtn');
+
+        // Socket Event Handling
+        socket.on('user_data', (u) => {
+            myBalance = u.balance;
+            dispName.innerText = u.name;
+            dispVip.innerText = u.vipLevel || '🥉 BRONZE';
+            dispBalance.innerText = u.balance.toFixed(2);
         });
 
-        socket.on('user_data', (data) => {
-            document.getElementById('balance').innerText = data.balance.toFixed(2);
-            document.getElementById('username').innerText = data.name;
-            document.getElementById('vipTag').innerText = data.vipLevel || '🥉 BRONZE';
-        });
-
-        socket.on('deposit_notice', (data) => alert(data.msg));
-
-        socket.on('game_state', (data) => {
-            currentStatus = data.status;
-            if (data.status === 'WAITING') {
-                hasBet = false;
-                flightProgress = 0;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                document.getElementById('multiplier').className = 'multiplier';
-                document.getElementById('multiplier').innerText = '1.00x';
-                document.getElementById('status').innerText = 'PLACE YOUR BETS (5s)...';
-                updateButton('BET', false);
-            }
+        socket.on('game_state', (st) => {
+            if (st.status === 'WAITING') startWaitingTimer(5);
         });
 
         socket.on('game_started', () => {
             currentStatus = 'FLYING';
-            if (hasBet) updateButton('CASHOUT', false);
-            else updateButton('IN PROGRESS...', true);
+            clearInterval(timerInterval);
+            waitingBox.style.display = 'none';
+            multText.style.display = 'block';
+            multText.className = 'multiplier-text flying';
+            multText.innerText = '1.00x';
+            playBeep(600, 'sine', 0.2);
+
+            if (isBetPlaced) {
+                betBtn.innerText = 'CASH OUT';
+                betBtn.className = 'btn btn-cashout';
+            } else {
+                betBtn.innerText = 'ROUND IN PROGRESS';
+                betBtn.disabled = true;
+            }
         });
 
         socket.on('tick', (data) => {
-            document.getElementById('multiplier').className = 'multiplier flying';
-            document.getElementById('multiplier').innerText = data.multiplier.toFixed(2) + 'x';
-            document.getElementById('status').innerText = 'PLANE IS FLYING...';
-            flightProgress = Math.min(1, flightProgress + 0.015);
-            drawPlane(flightProgress, false);
-
-            if (hasBet) {
-                const currentAmount = parseFloat(document.getElementById('betAmount').value) || 0;
-                document.getElementById('mainBtn').innerText = `CASHOUT (PKR ${(currentAmount * data.multiplier).toFixed(2)})`;
-            }
+            multText.innerText = data.multiplier.toFixed(2) + 'x';
+            planeMultiplier = data.multiplier;
         });
 
         socket.on('crashed', (data) => {
             currentStatus = 'CRASHED';
-            hasBet = false;
-            drawPlane(flightProgress, true);
-            document.getElementById('multiplier').className = 'multiplier crashed';
-            document.getElementById('multiplier').innerText = data.crashPoint.toFixed(2) + 'x';
-            document.getElementById('status').innerText = 'FLEW AWAY!';
-            updateButton('WAITING...', true);
+            multText.className = 'multiplier-text crashed';
+            multText.innerText = 'FLEW AWAY @ ' + data.crashPoint.toFixed(2) + 'x';
+            playBlastSound();
+
+            isBetPlaced = false;
+            betBtn.className = 'btn btn-bet';
+            betBtn.innerText = 'PLACE BET';
+            betBtn.disabled = false;
+
+            setTimeout(() => {
+                startWaitingTimer(5);
+            }, 1000);
         });
 
-        socket.on('cashout_success', (data) => {
-            hasBet = false;
-            alert(`Cashed out at ${data.multiplier}x! Won PKR ${data.winAmount}`);
-            updateButton('CASHED OUT', true);
+        socket.on('bet_confirmed', () => {
+            isBetPlaced = true;
+            betBtn.innerText = 'BET PLACED (WAITING)';
+            betBtn.disabled = true;
+            playBeep(800, 'sine', 0.1);
+        });
+
+        socket.on('cashout_success', (res) => {
+            isBetPlaced = false;
+            betBtn.className = 'btn btn-bet';
+            betBtn.innerText = 'PLACE BET';
+            betBtn.disabled = true;
+            playBeep(1200, 'sine', 0.3);
+            alert(`🎉 Cashout Success! Won PKR ${res.winAmount}`);
         });
 
         socket.on('error_msg', (msg) => alert(msg));
+        socket.on('deposit_notice', (d) => alert(d.msg));
 
-        function switchTab(tabName, btn) {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(tabName + '-section').classList.add('active');
-            btn.classList.add('active');
-            if (tabName === 'deposit') updateDepositDetails();
-        }
-
-        function updateDepositDetails() {
-            const method = document.getElementById('payMethod').value;
-            const infoBox = document.getElementById('accountInfo');
-            if (method === 'EasyPaisa') {
-                infoBox.innerHTML = `<b>EasyPaisa / IBAN Account:</b><br><code>PK95TMFB0000000027110903</code>`;
-            } else {
-                infoBox.innerHTML = `<b>USDT TRC20 Address:</b><br><code>TGGTyCLeX4vLDpSbTgCchgSB4AaiKLaoL9</code>`;
+        // Betting Button Action
+        betBtn.addEventListener('click', () => {
+            if (currentStatus === 'WAITING' && !isBetPlaced) {
+                const amt = parseFloat(document.getElementById('betAmount').value);
+                socket.emit('place_bet', { amount: amt });
+            } else if (currentStatus === 'FLYING' && isBetPlaced) {
+                socket.emit('cashout');
             }
+        });
+
+        // 5-Second Waiting Countdown
+        function startWaitingTimer(sec) {
+            currentStatus = 'WAITING';
+            multText.style.display = 'none';
+            waitingBox.style.display = 'block';
+            let c = sec;
+            timerCount.innerText = c;
+            clearInterval(timerInterval);
+
+            timerInterval = setInterval(() => {
+                c--;
+                if (c >= 0) {
+                    timerCount.innerText = c;
+                    playBeep(400, 'sine', 0.05);
+                }
+                if (c <= 0) {
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
         }
 
-        function claimRedeem() {
-            const code = document.getElementById('redeemInput').value;
-            if (!code) return alert('Enter a VIP code!');
-            socket.emit('redeem_code', { code });
-        }
-
-        function setBet(val) { document.getElementById('betAmount').value = val; }
+        // Modals Controls
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
         function submitDeposit() {
-            const method = document.getElementById('payMethod').value;
-            const amount = parseFloat(document.getElementById('depAmount').value);
-            const trxId = document.getElementById('trxId').value.trim();
-            if (!amount || !trxId) return alert('Enter amount and TRX ID!');
-            socket.emit('request_deposit', { method, amount, trxId });
+            const amount = document.getElementById('depAmount').value;
+            const trxId = document.getElementById('depTrx').value;
+            if(!amount || !trxId) return alert('Fill all fields');
+            socket.emit('request_deposit', { amount, trxId });
+            closeModal('depositModal');
         }
 
         function submitWithdraw() {
-            const method = document.getElementById('withMethod').value;
-            const amount = parseFloat(document.getElementById('withAmount').value);
-            const accountDetails = document.getElementById('withAccount').value.trim();
-            if (!amount || !accountDetails) return alert('Enter amount and account details!');
-            socket.emit('request_withdraw', { method, amount, accountDetails });
+            const amount = document.getElementById('wdAmount').value;
+            const accountNo = document.getElementById('wdAccount').value;
+            if(!amount || !accountNo) return alert('Fill all fields');
+            socket.emit('request_withdraw', { amount, accountNo });
+            closeModal('withdrawModal');
         }
 
-        function handleAction() {
-            if (currentStatus === 'WAITING' && !hasBet) {
-                const amount = parseFloat(document.getElementById('betAmount').value);
-                socket.emit('place_bet', { amount });
-                hasBet = true;
-                updateButton('BET PLACED', true);
-            } else if (currentStatus === 'FLYING' && hasBet) {
-                socket.emit('cashout');
+        function submitCode() {
+            const code = document.getElementById('codeVal').value;
+            if(!code) return alert('Enter code');
+            socket.emit('redeem_code', { code });
+            closeModal('codeModal');
+        }
+
+        // Canvas Engine: Real Zig-Zag Motion & 60 FPS Smooth Render
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let planeMultiplier = 1.00;
+        let angle = 0;
+
+        function renderFrame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (currentStatus === 'FLYING') {
+                angle += 0.08;
+                
+                // Curve calculation
+                let progress = Math.min((planeMultiplier - 1) / 3, 1);
+                let startX = 40;
+                let startY = canvas.height - 40;
+                let targetX = startX + progress * (canvas.width - 120);
+                let targetY = startY - progress * (canvas.height - 120);
+
+                // Zig-Zag oscillation offsets
+                let zigZagX = Math.sin(angle) * 8;
+                let zigZagY = Math.cos(angle * 1.5) * 12;
+
+                let currentX = targetX + zigZagX;
+                let currentY = targetY + zigZagY;
+
+                // Draw Red Flying Curve Line
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.quadraticCurveTo(startX + (currentX - startX) / 2, startY, currentX, currentY);
+                ctx.strokeStyle = '#e74c3c';
+                ctx.lineWidth = 4;
+                ctx.shadowColor = '#e74c3c';
+                ctx.shadowBlur = 12;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Draw Glowing Plane Icon
+                ctx.save();
+                ctx.translate(currentX, currentY);
+                ctx.rotate(-Math.PI / 6 + Math.sin(angle) * 0.1);
+                
+                ctx.fillStyle = '#f39c12';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-25, 10);
+                ctx.lineTo(-18, 0);
+                ctx.lineTo(-25, -10);
+                ctx.closePath();
+                ctx.fill();
+
+                // Engine Trail Effect
+                ctx.fillStyle = 'rgba(231, 76, 60, 0.6)';
+                ctx.beginPath();
+                ctx.arc(-22, 0, 4 + Math.sin(angle * 2) * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
             }
+
+            requestAnimationFrame(renderFrame);
         }
 
-        function updateButton(text, disabled) {
-            const btn = document.getElementById('mainBtn');
-            btn.innerText = text;
-            btn.disabled = disabled;
-            if (disabled) btn.className = 'action-btn btn-disabled';
-            else if (text.includes('CASHOUT')) btn.className = 'action-btn btn-cashout';
-            else btn.className = 'action-btn btn-bet';
-        }
-
-        updateDepositDetails();
+        renderFrame();
     </script>
 </body>
 </html>
