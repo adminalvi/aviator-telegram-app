@@ -97,10 +97,12 @@
             </select>
             <label>Amount (PKR / USD Equivalent)</label>
             <input type="number" id="depAmount" placeholder="Enter Amount">
-            <label>Transaction ID / Hash</label>
+            <label>Transaction ID / Hash (TID)</label>
             <input type="text" id="depTrx" placeholder="Enter Transaction ID">
-            <label>Screenshot Image URL / File Link (Optional)</label>
-            <input type="text" id="depScreenshot" placeholder="Paste image link or proof URL">
+            
+            <label>Upload Payment Screenshot Proof</label>
+            <input type="file" id="depFile" accept="image/*" style="background:#0a0d14; border:1px solid #232d3f; padding:8px; border-radius:6px; color:#fff; width:100%;">
+
             <button class="btn btn-bet" onclick="submitDeposit()">Submit Deposit Request</button>
             <button class="close-btn" onclick="closeModal('depositModal')">Cancel</button>
         </div>
@@ -128,6 +130,7 @@
         </div>
     </div>
 
+    <!-- Redeem Modal -->
     <div id="codeModal" class="modal">
         <div class="modal-content">
             <h3>🎁 Claim Redeem Code</h3>
@@ -298,10 +301,25 @@
             const amount = document.getElementById('depAmount').value;
             const trxId = document.getElementById('depTrx').value;
             const method = document.getElementById('depMethod').value;
-            const screenshot = document.getElementById('depScreenshot').value;
-            if(!amount || !trxId) return alert('Please fill required fields!');
-            socket.emit('request_deposit', { amount, trxId, method, screenshot });
-            closeModal('depositModal');
+            const fileInput = document.getElementById('depFile');
+
+            if(!amount || !trxId) return alert('Please fill required fields (Amount and TID)!');
+
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const base64Image = e.target.result;
+                    socket.emit('request_deposit', { amount, trxId, method, imageBuffer: base64Image });
+                    closeModal('depositModal');
+                };
+                
+                reader.readAsDataURL(file);
+            } else {
+                socket.emit('request_deposit', { amount, trxId, method, imageBuffer: null });
+                closeModal('depositModal');
+            }
         }
 
         function submitWithdraw() {
@@ -320,7 +338,6 @@
             closeModal('codeModal');
         }
 
-        // Canvas Engine: Zig-Zag Motion & 60 FPS Render
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
