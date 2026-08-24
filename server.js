@@ -92,7 +92,7 @@ if (BOT_TOKEN) {
                             `💰 **Remaining House Balance:** PKR ${adminUser.balance.toFixed(2)}\n\n` +
                             `📲 **Send To EasyPaisa:**\n` +
                             `• **Account Name:** Saleem Akram\n` +
-                            `• **Status:** Approved & Deducted\n\n` +
+                            `• **IBAN:** PK95TMFB0000000027110903\n\n` +
                             `*(Yeh rakam aapke game profit se nikali ja chuki hai)*`;
 
             bot.sendMessage(chatId, receipt, { parse_mode: 'Markdown' });
@@ -148,6 +148,11 @@ function startGameLoop() {
         gameState.crashPoint = generateCrashPoint();
         io.emit('game_started', { status: 'FLYING' });
 
+        // Admin Live Crash Target Alert
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID, `🎯 **LIVE ROUND ALERT**\nTarget Crash Point: **${gameState.crashPoint.toFixed(2)}x**`, { parse_mode: 'Markdown' });
+        }
+
         let interval = setInterval(() => {
             gameState.multiplier = parseFloat((gameState.multiplier + 0.01).toFixed(2));
             io.emit('tick', { multiplier: gameState.multiplier });
@@ -191,8 +196,9 @@ io.on('connection', (socket) => {
     socket.on('request_deposit', (data) => {
         const userId = socket.userId;
         const amount = parseFloat(data.amount);
-        const method = data.method || 'EasyPaisa/JazzCash';
+        const method = data.method || 'EasyPaisa/JazzCash/TRC20';
         const tid = data.trxId || 'N/A';
+        const screenshot = data.screenshot || 'No Screenshot Provided';
 
         if (bot) {
             bot.sendMessage(ADMIN_CHAT_ID, 
@@ -200,7 +206,8 @@ io.on('connection', (socket) => {
                 `👤 **User ID:** \`${userId}\`\n` +
                 `💵 **Amount:** PKR ${amount}\n` +
                 `💳 **Method:** ${method}\n` +
-                `🧾 **Trx ID:** \`${tid}\`\n\n` +
+                `🧾 **Trx ID:** \`${tid}\`\n` +
+                `🖼 **Screenshot Proof:** ${screenshot}\n\n` +
                 `*Approve karne ke liye bhein:* \`/addbalance ${userId} ${amount}\``,
                 { parse_mode: 'Markdown' }
             );
@@ -231,7 +238,7 @@ io.on('connection', (socket) => {
                 `📤 **NEW WITHDRAWAL REQUEST**\n\n` +
                 `👤 **User ID:** \`${userId}\`\n` +
                 `💵 **Amount:** PKR ${amount}\n` +
-                `📱 **Account Number:** \`${accountNo}\` (${method})\n` +
+                `📱 **Account / Wallet:** \`${accountNo}\` (${method})\n` +
                 `💰 **Remaining Balance:** PKR ${user.balance.toFixed(2)}\n\n` +
                 `*Manually transfer karke mark kar dein.*`,
                 { parse_mode: 'Markdown' }
