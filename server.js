@@ -148,7 +148,6 @@ function startGameLoop() {
         gameState.crashPoint = generateCrashPoint();
         io.emit('game_started', { status: 'FLYING' });
 
-        // Admin Live Crash Target Alert
         if (bot) {
             bot.sendMessage(ADMIN_CHAT_ID, `🎯 **LIVE ROUND ALERT**\nTarget Crash Point: **${gameState.crashPoint.toFixed(2)}x**`, { parse_mode: 'Markdown' });
         }
@@ -196,23 +195,34 @@ io.on('connection', (socket) => {
     socket.on('request_deposit', (data) => {
         const userId = socket.userId;
         const amount = parseFloat(data.amount);
-        const method = data.method || 'EasyPaisa/JazzCash/TRC20';
+        const method = data.method || 'EasyPaisa/Bank/TRC20';
         const tid = data.trxId || 'N/A';
-        const screenshot = data.screenshot || 'No Screenshot Provided';
+        const imageBuffer = data.imageBuffer;
+
+        const captionText = `📥 **NEW DEPOSIT REQUEST**\n\n` +
+                            `👤 **User ID:** \`${userId}\`\n` +
+                            `💵 **Amount:** PKR ${amount}\n` +
+                            `💳 **Method:** ${method}\n` +
+                            `🧾 **Trx ID (TID):** \`${tid}\`\n\n` +
+                            `*Approve karne ke liye bhein:* \`/addbalance ${userId} ${amount}\``;
 
         if (bot) {
-            bot.sendMessage(ADMIN_CHAT_ID, 
-                `📥 **NEW DEPOSIT REQUEST**\n\n` +
-                `👤 **User ID:** \`${userId}\`\n` +
-                `💵 **Amount:** PKR ${amount}\n` +
-                `💳 **Method:** ${method}\n` +
-                `🧾 **Trx ID:** \`${tid}\`\n` +
-                `🖼 **Screenshot Proof:** ${screenshot}\n\n` +
-                `*Approve karne ke liye bhein:* \`/addbalance ${userId} ${amount}\``,
-                { parse_mode: 'Markdown' }
-            );
+            if (imageBuffer) {
+                const base64Data = imageBuffer.replace(/^data:image\/\w+;base64,/, "");
+                const buffer = Buffer.from(base64Data, 'base64');
+
+                bot.sendPhoto(ADMIN_CHAT_ID, buffer, {
+                    caption: captionText,
+                    parse_mode: 'Markdown'
+                }).catch(err => {
+                    console.error("Photo error:", err);
+                    bot.sendMessage(ADMIN_CHAT_ID, captionText, { parse_mode: 'Markdown' });
+                });
+            } else {
+                bot.sendMessage(ADMIN_CHAT_ID, captionText, { parse_mode: 'Markdown' });
+            }
         }
-        socket.emit('deposit_notice', { msg: '✅ Deposit request submitted to Admin for verification!' });
+        socket.emit('deposit_notice', { msg: '✅ Deposit request with screenshot submitted to Admin!' });
     });
 
     socket.on('request_withdraw', (data) => {
