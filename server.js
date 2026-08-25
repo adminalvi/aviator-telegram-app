@@ -1,409 +1,332 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aviator VIP Game</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #0e131b; color: #fff; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const TelegramBot = require('node-telegram-bot-api');
 
-        .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #161d2a; border-bottom: 1px solid #232d3f; }
-        .user-info { display: flex; flex-direction: column; }
-        .username { font-weight: bold; font-size: 14px; color: #fff; }
-        .vip-badge { font-size: 11px; color: #f39c12; font-weight: bold; }
-        .balance-box { background: #000; padding: 6px 12px; border-radius: 20px; border: 1px solid #2ecc71; color: #2ecc71; font-weight: bold; font-size: 14px; }
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname)));
 
-        .game-container { position: relative; flex: 1; background: radial-gradient(circle at center, #1a2332 0%, #0a0d14 100%); display: flex; justify-content: center; align-items: center; overflow: hidden; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-        .status-overlay { position: absolute; text-align: center; z-index: 10; pointer-events: none; }
-        .multiplier-text { font-size: 55px; font-weight: 900; text-shadow: 0 0 20px rgba(231, 76, 60, 0.6); }
-        .flying { color: #fff; }
-        .crashed { color: #e74c3c; }
-        .waiting-box { font-size: 20px; font-weight: bold; color: #f39c12; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 10px; border: 1px solid #f39c12; }
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-        .controls-panel { background: #161d2a; padding: 15px; border-top-left-radius: 15px; border-top-right-radius: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #232d3f; }
-        .input-group { display: flex; gap: 10px; }
-        .bet-input { flex: 1; background: #0a0d14; border: 1px solid #232d3f; border-radius: 8px; padding: 10px; color: #fff; font-size: 16px; font-weight: bold; text-align: center; }
-        .btn { border: none; border-radius: 8px; padding: 12px 20px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
-        .btn-bet { background: #2ecc71; color: #fff; width: 100%; }
-        .btn-bet:disabled { background: #555; cursor: not-allowed; }
-        .btn-cashout { background: #f1c40f; color: #000; width: 100%; font-size: 18px; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); }
+const BOT_TOKEN = process.env.BOT_TOKEN || "8413886563:AAHdpQEsq70sDCTqZvSYa7PsQ4M500URqjA";
+let APP_URL = process.env.APP_URL || "https://aviator-telegram-app-production.up.railway.app";
+if (!APP_URL.startsWith('http')) APP_URL = 'https://' + APP_URL;
 
-        .actions-bar { display: flex; gap: 10px; justify-content: space-between; }
-        .btn-act { flex: 1; background: #242f3e; color: #3b82f6; border: 1px solid #3b82f6; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; text-align: center; }
-        
-        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; }
-        .modal-content { background: #161d2a; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; display: flex; flex-direction: column; gap: 12px; border: 1px solid #232d3f; max-height: 90vh; overflow-y: auto; }
-        .modal-content h3 { color: #fff; font-size: 18px; text-align: center; }
-        .modal-content label { font-size: 12px; color: #b0c4de; margin-bottom: -6px; }
-        .modal-content input, .modal-content select { background: #0a0d14; border: 1px solid #232d3f; padding: 10px; border-radius: 6px; color: #fff; font-size: 14px; }
-        .info-box { background: #0a0d14; padding: 10px; border-radius: 6px; border: 1px dashed #3b82f6; font-size: 11px; line-height: 1.5; color: #ddd; word-break: break-all; }
-        .close-btn { background: #e74c3c; color: #fff; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-    </style>
-</head>
-<body>
+const ADMIN_CHAT_ID = "8873354547";
+const DB_FILE = path.join(__dirname, 'users_db.json');
+const CODES_FILE = path.join(__dirname, 'redeem_codes.json');
 
-    <div class="top-bar">
-        <div class="user-info">
-            <span class="username" id="disp-name">Player</span>
-            <span class="vip-badge" id="disp-vip">🥉 BRONZE</span>
-        </div>
-        <div class="balance-box">
-            PKR <span id="disp-balance">0.00</span>
-        </div>
-    </div>
+let users = {};
+if (fs.existsSync(DB_FILE)) {
+    try { users = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch(e) { users = {}; }
+}
+function saveDB() {
+    try { fs.writeFileSync(DB_FILE, JSON.stringify(users, null, 2)); } catch(e){}
+}
 
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div class="status-overlay">
-            <div id="multiplier" class="multiplier-text flying" style="display:none;">1.00x</div>
-            <div id="waitingBox" class="waiting-box">Next Round In: <span id="timerCount">5</span>s</div>
-        </div>
-    </div>
+let redeemCodes = {};
+if (fs.existsSync(CODES_FILE)) {
+    try { redeemCodes = JSON.parse(fs.readFileSync(CODES_FILE, 'utf8')); } catch(e) { redeemCodes = {}; }
+}
+function saveCodes() {
+    try { fs.writeFileSync(CODES_FILE, JSON.stringify(redeemCodes, null, 2)); } catch(e){}
+}
 
-    <div class="controls-panel">
-        <div class="input-group">
-            <input type="number" id="betAmount" class="bet-input" value="100" min="10" step="10">
-        </div>
-        <button id="betBtn" class="btn btn-bet">PLACE BET</button>
-        
-        <div class="actions-bar">
-            <button class="btn-act" onclick="openModal('depositModal')">📥 DEPOSIT</button>
-            <button class="btn-act" onclick="openModal('withdrawModal')">📤 WITHDRAW</button>
-            <button class="btn-act" onclick="openModal('codeModal')">🎁 REDEEM</button>
-        </div>
-    </div>
+if (!users[ADMIN_CHAT_ID]) {
+    users[ADMIN_CHAT_ID] = { id: ADMIN_CHAT_ID, name: 'Admin House', balance: 0.00, wagerRequired: 0.00, totalWagered: 0 };
+    saveDB();
+}
 
-    <!-- Deposit Modal -->
-    <div id="depositModal" class="modal">
-        <div class="modal-content">
-            <h3>📥 Deposit Funds</h3>
-            <div class="info-box">
-                <b>EasyPaisa / Bank Account:</b><br>
-                • <b>Account Name:</b> Saleem Akram<br>
-                • <b>IBAN:</b> <code>PK95TMFB0000000027110903</code><br><br>
-                <b>USDT TRC20 Address:</b><br>
-                • <code>TGGTyCLeX4vLDpSbTgCchgSB4AaiKLaoL9</code><br><br>
-                • <b>Limits:</b> Min PKR 100 | Max PKR 50,000
-            </div>
-            <label>Select Payment Method</label>
-            <select id="depMethod">
-                <option value="EasyPaisa / Bank">EasyPaisa / Bank Transfer</option>
-                <option value="USDT (TRC20)">USDT (TRC20)</option>
-            </select>
-            <label>Amount (PKR / USD Equivalent)</label>
-            <input type="number" id="depAmount" placeholder="Enter Amount">
-            <label>Transaction ID / Hash (TID)</label>
-            <input type="text" id="depTrx" placeholder="Enter Transaction ID">
+function getVipLevel(totalWagered = 0) {
+    if (totalWagered >= 100000) return '👑 VIP KING';
+    if (totalWagered >= 50000) return '💎 PLATINUM';
+    if (totalWagered >= 10000) return '🥇 GOLD';
+    if (totalWagered >= 2000) return '🥈 SILVER';
+    return '🥉 BRONZE';
+}
+
+let bot = null;
+if (BOT_TOKEN) {
+    try {
+        bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
+        bot.onText(/\/start/, (msg) => {
+            const chatId = String(msg.chat.id);
+            if (!users[chatId]) {
+                users[chatId] = { id: chatId, name: msg.chat.first_name || 'Player', balance: 0.00, wagerRequired: 0.00, totalWagered: 0 };
+                saveDB();
+            }
+            bot.sendMessage(chatId, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${chatId}\`\nYour VIP Level: **${getVipLevel(users[chatId].totalWagered)}**`, {
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: [[{ text: "🎮 Open Aviator VIP Game", web_app: { url: APP_URL } }]] }
+            });
+        });
+
+        bot.onText(/\/mybalance/, (msg) => {
+            const chatId = String(msg.chat.id);
+            if (users[chatId]) {
+                bot.sendMessage(chatId, `💰 **Your Balance:** PKR ${users[chatId].balance.toFixed(2)}\n⭐ **VIP Status:** ${getVipLevel(users[chatId].totalWagered)}`, { parse_mode: 'Markdown' });
+            }
+        });
+
+        bot.onText(/\/adminwithdraw (.+)/, (msg, match) => {
+            const chatId = String(msg.chat.id);
+            if (chatId !== ADMIN_CHAT_ID) return;
+
+            const amount = parseFloat(match[1]);
+            const adminUser = users[ADMIN_CHAT_ID];
+
+            if (!adminUser || adminUser.balance < amount) {
+                return bot.sendMessage(chatId, `❌ **Insufficient Admin Balance!**\nAvailable: PKR ${adminUser ? adminUser.balance.toFixed(2) : 0}`);
+            }
+
+            adminUser.balance -= amount;
+            saveDB();
+
+            const receipt = `🎉 **ADMIN PROFIT WITHDRAWAL** 🎉\n\n` +
+                            `💵 **Amount Released:** PKR ${amount}\n` +
+                            `💰 **Remaining House Balance:** PKR ${adminUser.balance.toFixed(2)}\n\n` +
+                            `📲 **Send To EasyPaisa:**\n` +
+                            `• **Account Name:** Saleem Akram\n` +
+                            `• **IBAN:** PK95TMFB0000000027110903`;
+
+            bot.sendMessage(chatId, receipt, { parse_mode: 'Markdown' });
+        });
+
+        bot.onText(/\/makecode (.+) (.+) (.+)/, (msg, match) => {
+            if (String(msg.chat.id) !== ADMIN_CHAT_ID) return;
+
+            const code = match[1].trim().toUpperCase();
+            const amount = parseFloat(match[2]);
+            const maxUses = parseInt(match[3]);
+
+            redeemCodes[code] = { amount, maxUses, usedBy: [] };
+            saveCodes();
+
+            bot.sendMessage(msg.chat.id, `🎁 **VIP Redeem Code Created!**\n\n🔑 **Code:** \`${code}\`\n💵 **Amount:** PKR ${amount}\n👥 **Max Uses:** ${maxUses}`, { parse_mode: 'Markdown' });
+        });
+
+        bot.onText(/\/addbalance (.+) (.+)/, (msg, match) => {
+            if (String(msg.chat.id) !== ADMIN_CHAT_ID) return;
+            const targetUserId = match[1].trim();
+            const amount = parseFloat(match[2]);
+
+            if (!users[targetUserId]) users[targetUserId] = { id: targetUserId, name: 'Player', balance: 0.00, wagerRequired: 0.00, totalWagered: 0 };
+
+            users[targetUserId].balance += amount;
+            users[targetUserId].wagerRequired = (users[targetUserId].wagerRequired || 0) + amount;
+            saveDB();
+
+            io.to(targetUserId).emit('user_data', { ...users[targetUserId], vipLevel: getVipLevel(users[targetUserId].totalWagered) });
+            bot.sendMessage(msg.chat.id, `✅ Added PKR ${amount} to User ID: \`${targetUserId}\``);
             
-            <label>Upload Payment Screenshot Proof</label>
-            <input type="file" id="depFile" accept="image/*" style="background:#0a0d14; border:1px solid #232d3f; padding:8px; border-radius:6px; color:#fff; width:100%;">
-
-            <button class="btn btn-bet" onclick="submitDeposit()">Submit Deposit Request</button>
-            <button class="close-btn" onclick="closeModal('depositModal')">Cancel</button>
-        </div>
-    </div>
-
-    <!-- Withdraw Modal -->
-    <div id="withdrawModal" class="modal">
-        <div class="modal-content">
-            <h3>📤 Withdraw Funds</h3>
-            <div class="info-box">
-                • <b>Limits:</b> Min PKR 500 | Max PKR 25,000<br>
-                • Wager requirement must be completed before withdrawal.
-            </div>
-            <label>Select Payout Method</label>
-            <select id="wdMethod">
-                <option value="EasyPaisa / Bank">EasyPaisa / Bank</option>
-                <option value="USDT (TRC20)">USDT (TRC20)</option>
-            </select>
-            <label>Withdraw Amount (PKR)</label>
-            <input type="number" id="wdAmount" placeholder="Amount (Min 500)">
-            <label>Account Number / TRC20 Wallet</label>
-            <input type="text" id="wdAccount" placeholder="Enter Account No or TRC20 Address">
-            <button class="btn btn-bet" onclick="submitWithdraw()">Submit Withdraw Request</button>
-            <button class="close-btn" onclick="closeModal('withdrawModal')">Cancel</button>
-        </div>
-    </div>
-
-    <!-- Redeem Modal -->
-    <div id="codeModal" class="modal">
-        <div class="modal-content">
-            <h3>🎁 Claim Redeem Code</h3>
-            <label>Enter VIP Code</label>
-            <input type="text" id="codeVal" placeholder="e.g. BONUS100">
-            <button class="btn btn-bet" onclick="submitCode()">Claim Code</button>
-            <button class="close-btn" onclick="closeModal('codeModal')">Cancel</button>
-        </div>
-    </div>
-
-    <script>
-        const tg = window.Telegram?.WebApp;
-        if (tg) tg.expand();
-
-        const socket = io();
-
-        let tgUser = tg?.initDataUnsafe?.user || { id: "8873354547", first_name: "Admin" };
-        socket.emit('init_user', tgUser);
-
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playBeep(freq, type = 'sine', duration = 0.1) {
-            try {
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = type;
-                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
-            } catch(e) {}
-        }
-
-        function playBlastSound() {
-            try {
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.4);
-            } catch(e) {}
-        }
-
-        let myBalance = 0;
-        let currentStatus = 'WAITING';
-        let isBetPlaced = false;
-        let timerInterval = null;
-
-        const dispName = document.getElementById('disp-name');
-        const dispVip = document.getElementById('disp-vip');
-        const dispBalance = document.getElementById('disp-balance');
-        const multText = document.getElementById('multiplier');
-        const waitingBox = document.getElementById('waitingBox');
-        const timerCount = document.getElementById('timerCount');
-        const betBtn = document.getElementById('betBtn');
-
-        socket.on('user_data', (u) => {
-            myBalance = u.balance;
-            dispName.innerText = u.name;
-            dispVip.innerText = u.vipLevel || '🥉 BRONZE';
-            dispBalance.innerText = u.balance.toFixed(2);
+            // Player ko bhi khushi ka message bhejna
+            bot.sendMessage(targetUserId, `🎉 **Deposit Approved!**\n\nYour account has been credited with **PKR ${amount}** successfully. Enjoy gaming! 🚀`, { parse_mode: 'Markdown' }).catch(()=>{});
         });
 
-        socket.on('game_state', (st) => {
-            if (st.status === 'WAITING') startWaitingTimer(5);
-        });
+    } catch (e) { console.error("Bot Error:", e.message); }
+}
 
-        socket.on('game_started', () => {
-            currentStatus = 'FLYING';
-            clearInterval(timerInterval);
-            waitingBox.style.display = 'none';
-            multText.style.display = 'block';
-            multText.className = 'multiplier-text flying';
-            multText.innerText = '1.00x';
-            playBeep(600, 'sine', 0.2);
+let gameState = { status: 'WAITING', multiplier: 1.00, crashPoint: 1.00, bets: {} };
 
-            if (isBetPlaced) {
-                betBtn.innerText = 'CASH OUT';
-                betBtn.className = 'btn btn-cashout';
-            } else {
-                betBtn.innerText = 'ROUND IN PROGRESS';
-                betBtn.disabled = true;
-            }
-        });
+function generateCrashPoint() {
+    const e = Math.pow(2, 52);
+    const h = Math.floor(Math.random() * e);
+    return Math.min(Math.max(1.01, Math.floor((100 * e - h) / (e - h)) / 100), 100.00);
+}
 
-        socket.on('tick', (data) => {
-            multText.innerText = data.multiplier.toFixed(2) + 'x';
-            planeMultiplier = data.multiplier;
-        });
+function startGameLoop() {
+    gameState.status = 'WAITING';
+    gameState.multiplier = 1.00;
+    gameState.bets = {};
+    io.emit('game_state', { status: gameState.status, multiplier: 1.00 });
 
-        socket.on('crashed', (data) => {
-            currentStatus = 'CRASHED';
-            multText.className = 'multiplier-text crashed';
-            multText.innerText = 'FLEW AWAY @ ' + data.crashPoint.toFixed(2) + 'x';
-            playBlastSound();
+    setTimeout(() => {
+        gameState.status = 'FLYING';
+        gameState.crashPoint = generateCrashPoint();
+        io.emit('game_started', { status: 'FLYING' });
 
-            isBetPlaced = false;
-            betBtn.className = 'btn btn-bet';
-            betBtn.innerText = 'PLACE BET';
-            betBtn.disabled = false;
+        let interval = setInterval(() => {
+            gameState.multiplier = parseFloat((gameState.multiplier + 0.01).toFixed(2));
+            io.emit('tick', { multiplier: gameState.multiplier });
 
-            setTimeout(() => {
-                startWaitingTimer(5);
-            }, 1000);
-        });
+            if (gameState.multiplier >= gameState.crashPoint) {
+                clearInterval(interval);
+                gameState.status = 'CRASHED';
 
-        socket.on('bet_confirmed', () => {
-            isBetPlaced = true;
-            betBtn.innerText = 'BET PLACED (WAITING)';
-            betBtn.disabled = true;
-            playBeep(800, 'sine', 0.1);
-        });
-
-        socket.on('cashout_success', (res) => {
-            isBetPlaced = false;
-            betBtn.className = 'btn btn-bet';
-            betBtn.innerText = 'PLACE BET';
-            betBtn.disabled = true;
-            playBeep(1200, 'sine', 0.3);
-            alert(`🎉 Cashout Success! Won PKR ${res.winAmount}`);
-        });
-
-        socket.on('error_msg', (msg) => alert(msg));
-        socket.on('deposit_notice', (d) => alert(d.msg));
-
-        betBtn.addEventListener('click', () => {
-            if (currentStatus === 'WAITING' && !isBetPlaced) {
-                const amt = parseFloat(document.getElementById('betAmount').value);
-                socket.emit('place_bet', { amount: amt });
-            } else if (currentStatus === 'FLYING' && isBetPlaced) {
-                socket.emit('cashout');
-            }
-        });
-
-        function startWaitingTimer(sec) {
-            currentStatus = 'WAITING';
-            multText.style.display = 'none';
-            waitingBox.style.display = 'block';
-            let c = sec;
-            timerCount.innerText = c;
-            clearInterval(timerInterval);
-
-            timerInterval = setInterval(() => {
-                c--;
-                if (c >= 0) {
-                    timerCount.innerText = c;
-                    playBeep(400, 'sine', 0.05);
+                let totalLostInRound = 0;
+                for (let socketId in gameState.bets) {
+                    let bet = gameState.bets[socketId];
+                    if (!bet.cashedOut) totalLostInRound += bet.amount;
                 }
-                if (c <= 0) {
-                    clearInterval(timerInterval);
+
+                if (totalLostInRound > 0) {
+                    if (!users[ADMIN_CHAT_ID]) users[ADMIN_CHAT_ID] = { id: ADMIN_CHAT_ID, name: 'Admin House', balance: 0.00, wagerRequired: 0.00, totalWagered: 0 };
+                    users[ADMIN_CHAT_ID].balance += totalLostInRound;
+                    saveDB();
                 }
-            }, 1000);
-        }
 
-        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
-        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+                io.emit('crashed', { crashPoint: gameState.crashPoint });
+                setTimeout(startGameLoop, 3000);
+            }
+        }, 100);
+    }, 5000);
+}
 
-        function submitDeposit() {
-            const amount = document.getElementById('depAmount').value;
-            const trxId = document.getElementById('depTrx').value;
-            const method = document.getElementById('depMethod').value;
-            const fileInput = document.getElementById('depFile');
+io.on('connection', (socket) => {
+    socket.on('init_user', (tgUser) => {
+        const userId = tgUser?.id ? String(tgUser.id) : socket.id;
+        const name = tgUser?.first_name ? `${tgUser.first_name} ${tgUser.last_name || ''}` : 'Player';
 
-            if(!amount || !trxId) return alert('Please fill required fields (Amount and TID)!');
+        if (!users[userId]) users[userId] = { id: userId, name: name.trim(), balance: 0.00, wagerRequired: 0.00, totalWagered: 0 };
+        socket.userId = userId;
+        socket.join(userId);
 
-            if (fileInput.files && fileInput.files[0]) {
-                const file = fileInput.files[0];
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    const base64Image = e.target.result;
-                    socket.emit('request_deposit', { amount, trxId, method, imageBuffer: base64Image });
-                    closeModal('depositModal');
-                };
-                
-                reader.readAsDataURL(file);
+        socket.emit('user_data', { ...users[userId], vipLevel: getVipLevel(users[userId].totalWagered) });
+        socket.emit('game_state', { status: gameState.status, multiplier: gameState.multiplier });
+    });
+
+    socket.on('request_deposit', (data) => {
+        const userId = socket.userId;
+        const amount = parseFloat(data.amount);
+        const method = data.method || 'EasyPaisa/Bank/TRC20';
+        const tid = data.trxId || 'N/A';
+        const imageBuffer = data.imageBuffer;
+
+        const captionText = `📥 **NEW DEPOSIT REQUEST**\n\n` +
+                            `👤 **User ID:** \`${userId}\`\n` +
+                            `💵 **Amount:** PKR ${amount}\n` +
+                            `💳 **Method:** ${method}\n` +
+                            `🧾 **Trx ID (TID):** \`${tid}\`\n\n` +
+                            `*Approve karne ke liye bhein:* \`/addbalance ${userId} ${amount}\``;
+
+        if (bot) {
+            if (imageBuffer) {
+                const base64Data = imageBuffer.replace(/^data:image\/\w+;base64,/, "");
+                const buffer = Buffer.from(base64Data, 'base64');
+
+                bot.sendPhoto(ADMIN_CHAT_ID, buffer, {
+                    caption: captionText,
+                    parse_mode: 'Markdown'
+                }).catch(err => {
+                    bot.sendMessage(ADMIN_CHAT_ID, captionText, { parse_mode: 'Markdown' });
+                });
             } else {
-                socket.emit('request_deposit', { amount, trxId, method, imageBuffer: null });
-                closeModal('depositModal');
+                bot.sendMessage(ADMIN_CHAT_ID, captionText, { parse_mode: 'Markdown' });
             }
+            
+            // Player ko confirmation message
+            bot.sendMessage(userId, `⏳ **Deposit Request Received!**\n\nYour request for **PKR ${amount}** is submitted successfully. Admin will verify your TID & Screenshot shortly (10-30 mins).`, { parse_mode: 'Markdown' }).catch(()=>{});
+        }
+        socket.emit('deposit_notice', { msg: '✅ Deposit request submitted successfully!' });
+    });
+
+    socket.on('request_withdraw', (data) => {
+        const userId = socket.userId;
+        const user = users[userId];
+        const amount = parseFloat(data.amount);
+        const accountNo = data.accountNo;
+        const method = data.method || 'EasyPaisa';
+
+        if (!user || user.balance < amount) {
+            return socket.emit('error_msg', 'Insufficient Balance!');
         }
 
-        function submitWithdraw() {
-            const amount = document.getElementById('wdAmount').value;
-            const accountNo = document.getElementById('wdAccount').value;
-            const method = document.getElementById('wdMethod').value;
-            if(!amount || !accountNo) return alert('Please fill required fields!');
-            socket.emit('request_withdraw', { amount, accountNo, method });
-            closeModal('withdrawModal');
+        if (user.wagerRequired > 0) {
+            return socket.emit('error_msg', `Complete Wager First! Required: PKR ${user.wagerRequired.toFixed(2)}`);
         }
 
-        function submitCode() {
-            const code = document.getElementById('codeVal').value;
-            if(!code) return alert('Enter code!');
-            socket.emit('redeem_code', { code });
-            closeModal('codeModal');
+        user.balance -= amount;
+        saveDB();
+
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID,
+                `📤 **NEW WITHDRAWAL REQUEST**\n\n` +
+                `👤 **User ID:** \`${userId}\`\n` +
+                `💵 **Amount:** PKR ${amount}\n` +
+                `📱 **Account / Wallet:** \`${accountNo}\` (${method})\n` +
+                `💰 **Remaining Balance:** PKR ${user.balance.toFixed(2)}\n\n` +
+                `*Manually transfer karke mark kar dein.*`,
+                { parse_mode: 'Markdown' }
+            );
+
+            // PLAYER KO KHUSH KARNE WALA PROFESSIONAL MESSAGE (12/24 HOURS NOTICE)
+            bot.sendMessage(userId,
+                `🎉 **Withdrawal Request Submitted Successfully!**\n\n` +
+                `💵 **Amount:** PKR ${amount}\n` +
+                `💳 **Method:** ${method} (${accountNo})\n\n` +
+                `⏳ *Your request is under review. Payouts are normally processed within **12 to 24 hours**. Thank you for playing with us!* 🚀`,
+                { parse_mode: 'Markdown' }
+            ).catch(()=>{});
         }
 
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        socket.emit('user_data', { ...user, vipLevel: getVipLevel(user.totalWagered) });
+        socket.emit('deposit_notice', { msg: '✅ Withdrawal request submitted! Check your Telegram bot for status.' });
+    });
 
-        function resizeCanvas() {
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+    socket.on('redeem_code', (data) => {
+        const code = (data.code || '').trim().toUpperCase();
+        const userId = socket.userId;
+        const user = users[userId];
 
-        let planeMultiplier = 1.00;
-        let angle = 0;
+        if (!redeemCodes[code]) return socket.emit('error_msg', 'Invalid Code!');
+        const item = redeemCodes[code];
 
-        function renderFrame() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (item.usedBy.includes(userId)) return socket.emit('error_msg', 'You already used this code!');
+        if (item.usedBy.length >= item.maxUses) return socket.emit('error_msg', 'Code limit reached!');
 
-            if (currentStatus === 'FLYING') {
-                angle += 0.08;
-                
-                let progress = Math.min((planeMultiplier - 1) / 3, 1);
-                let startX = 40;
-                let startY = canvas.height - 40;
-                let targetX = startX + progress * (canvas.width - 120);
-                let targetY = startY - progress * (canvas.height - 120);
+        item.usedBy.push(userId);
+        user.balance += item.amount;
+        user.wagerRequired = (user.wagerRequired || 0) + item.amount;
+        saveCodes();
+        saveDB();
 
-                let zigZagX = Math.sin(angle) * 8;
-                let zigZagY = Math.cos(angle * 1.5) * 12;
+        socket.emit('user_data', { ...user, vipLevel: getVipLevel(user.totalWagered) });
+        socket.emit('deposit_notice', { msg: `🎉 VIP Code Claimed! Added PKR ${item.amount} to your balance.` });
+    });
 
-                let currentX = targetX + zigZagX;
-                let currentY = targetY + zigZagY;
+    socket.on('place_bet', (data) => {
+        const user = users[socket.userId];
+        const betAmount = parseFloat(data.amount);
 
-                ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.quadraticCurveTo(startX + (currentX - startX) / 2, startY, currentX, currentY);
-                ctx.strokeStyle = '#e74c3c';
-                ctx.lineWidth = 4;
-                ctx.shadowColor = '#e74c3c';
-                ctx.shadowBlur = 12;
-                ctx.stroke();
-                ctx.shadowBlur = 0;
+        if (gameState.status !== 'WAITING') return socket.emit('error_msg', 'Wait for next round!');
+        if (!user || user.balance < betAmount || betAmount <= 0) return socket.emit('error_msg', 'Insufficient balance!');
 
-                ctx.save();
-                ctx.translate(currentX, currentY);
-                ctx.rotate(-Math.PI / 6 + Math.sin(angle) * 0.1);
-                
-                ctx.fillStyle = '#f39c12';
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(-25, 10);
-                ctx.lineTo(-18, 0);
-                ctx.lineTo(-25, -10);
-                ctx.closePath();
-                ctx.fill();
+        user.balance -= betAmount;
+        user.totalWagered = (user.totalWagered || 0) + betAmount;
+        if (user.wagerRequired > 0) user.wagerRequired = Math.max(0, user.wagerRequired - betAmount);
+        saveDB();
 
-                ctx.fillStyle = 'rgba(231, 76, 60, 0.6)';
-                ctx.beginPath();
-                ctx.arc(-22, 0, 4 + Math.sin(angle * 2) * 2, 0, Math.PI * 2);
-                ctx.fill();
+        gameState.bets[socket.id] = { userId: socket.userId, amount: betAmount, cashedOut: false };
+        socket.emit('user_data', { ...user, vipLevel: getVipLevel(user.totalWagered) });
+        socket.emit('bet_confirmed', { amount: betAmount });
+    });
 
-                ctx.restore();
-            }
+    socket.on('cashout', () => {
+        const bet = gameState.bets[socket.id];
+        const user = users[socket.userId];
 
-            requestAnimationFrame(renderFrame);
-        }
+        if (gameState.status !== 'FLYING' || !bet || bet.cashedOut) return;
 
-        renderFrame();
-    </script>
-</body>
-</html>
+        bet.cashedOut = true;
+        const winAmount = parseFloat((bet.amount * gameState.multiplier).toFixed(2));
+        user.balance += winAmount;
+        saveDB();
+
+        socket.emit('user_data', { ...user, vipLevel: getVipLevel(user.totalWagered) });
+        socket.emit('cashout_success', { winAmount, multiplier: gameState.multiplier });
+    });
+});
+
+startGameLoop();
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
