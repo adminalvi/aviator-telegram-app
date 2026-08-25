@@ -1,7 +1,7 @@
 {
   "name": "aviator-telegram-app",
   "version": "1.0.0",
-  "description": "Aviator Telegram Mini App with Real Platform Features",
+  "description": "Aviator Telegram Mini App",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
