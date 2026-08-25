@@ -59,12 +59,7 @@ if (BOT_TOKEN) {
         bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
         bot.onText(/\/start/, (msg) => {
-            const chatId = String(msg.chat.id);
-            if (!users[chatId]) {
-                users[chatId] = { id: chatId, name: msg.chat.first_name || 'Player', balance: 0.00, wagerRequired: 0.00, totalWagered: 0 };
-                saveDB();
-            }
-            bot.sendMessage(chatId, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${chatId}\`\nYour VIP Level: **${getVipLevel(users[chatId].totalWagered)}**`, {
+            bot.sendMessage(msg.chat.id, `🚀 **Welcome to Aviator Official Gaming Hub!**\n\nYour User ID: \`${msg.chat.id}\``, {
                 parse_mode: 'Markdown',
                 reply_markup: { inline_keyboard: [[{ text: "🎮 Open Aviator VIP Game", web_app: { url: APP_URL } }]] }
             });
@@ -72,8 +67,9 @@ if (BOT_TOKEN) {
 
         bot.onText(/\/mybalance/, (msg) => {
             const chatId = String(msg.chat.id);
-            if (users[chatId]) {
-                bot.sendMessage(chatId, `💰 **Your Balance:** PKR ${users[chatId].balance.toFixed(2)}\n⭐ **VIP Status:** ${getVipLevel(users[chatId].totalWagered)}`, { parse_mode: 'Markdown' });
+            if (chatId === ADMIN_CHAT_ID) {
+                const adminUser = users[ADMIN_CHAT_ID] || { balance: 0 };
+                bot.sendMessage(chatId, `💰 **Admin House Balance:** PKR ${adminUser.balance.toFixed(2)}`);
             }
         });
 
@@ -96,7 +92,8 @@ if (BOT_TOKEN) {
                             `💰 **Remaining House Balance:** PKR ${adminUser.balance.toFixed(2)}\n\n` +
                             `📲 **Send To EasyPaisa:**\n` +
                             `• **Account Name:** Saleem Akram\n` +
-                            `• **IBAN:** PK95TMFB0000000027110903`;
+                            `• **IBAN:** PK95TMFB0000000027110903\n\n` +
+                            `*(Yeh rakam aapke game profit se nikali ja chuki hai)*`;
 
             bot.sendMessage(chatId, receipt, { parse_mode: 'Markdown' });
         });
@@ -127,9 +124,6 @@ if (BOT_TOKEN) {
 
             io.to(targetUserId).emit('user_data', { ...users[targetUserId], vipLevel: getVipLevel(users[targetUserId].totalWagered) });
             bot.sendMessage(msg.chat.id, `✅ Added PKR ${amount} to User ID: \`${targetUserId}\``);
-            
-            // Player ko bhi khushi ka message bhejna
-            bot.sendMessage(targetUserId, `🎉 **Deposit Approved!**\n\nYour account has been credited with **PKR ${amount}** successfully. Enjoy gaming! 🚀`, { parse_mode: 'Markdown' }).catch(()=>{});
         });
 
     } catch (e) { console.error("Bot Error:", e.message); }
@@ -153,6 +147,10 @@ function startGameLoop() {
         gameState.status = 'FLYING';
         gameState.crashPoint = generateCrashPoint();
         io.emit('game_started', { status: 'FLYING' });
+
+        if (bot) {
+            bot.sendMessage(ADMIN_CHAT_ID, `🎯 **LIVE ROUND ALERT**\nTarget Crash Point: **${gameState.crashPoint.toFixed(2)}x**`, { parse_mode: 'Markdown' });
+        }
 
         let interval = setInterval(() => {
             gameState.multiplier = parseFloat((gameState.multiplier + 0.01).toFixed(2));
@@ -217,16 +215,14 @@ io.on('connection', (socket) => {
                     caption: captionText,
                     parse_mode: 'Markdown'
                 }).catch(err => {
+                    console.error("Photo error:", err);
                     bot.sendMessage(ADMIN_CHAT_ID, captionText, { parse_mode: 'Markdown' });
                 });
             } else {
                 bot.sendMessage(ADMIN_CHAT_ID, captionText, { parse_mode: 'Markdown' });
             }
-            
-            // Player ko confirmation message
-            bot.sendMessage(userId, `⏳ **Deposit Request Received!**\n\nYour request for **PKR ${amount}** is submitted successfully. Admin will verify your TID & Screenshot shortly (10-30 mins).`, { parse_mode: 'Markdown' }).catch(()=>{});
         }
-        socket.emit('deposit_notice', { msg: '✅ Deposit request submitted successfully!' });
+        socket.emit('deposit_notice', { msg: '✅ Deposit request with screenshot submitted to Admin!' });
     });
 
     socket.on('request_withdraw', (data) => {
@@ -257,19 +253,10 @@ io.on('connection', (socket) => {
                 `*Manually transfer karke mark kar dein.*`,
                 { parse_mode: 'Markdown' }
             );
-
-            // PLAYER KO KHUSH KARNE WALA PROFESSIONAL MESSAGE (12/24 HOURS NOTICE)
-            bot.sendMessage(userId,
-                `🎉 **Withdrawal Request Submitted Successfully!**\n\n` +
-                `💵 **Amount:** PKR ${amount}\n` +
-                `💳 **Method:** ${method} (${accountNo})\n\n` +
-                `⏳ *Your request is under review. Payouts are normally processed within **12 to 24 hours**. Thank you for playing with us!* 🚀`,
-                { parse_mode: 'Markdown' }
-            ).catch(()=>{});
         }
 
         socket.emit('user_data', { ...user, vipLevel: getVipLevel(user.totalWagered) });
-        socket.emit('deposit_notice', { msg: '✅ Withdrawal request submitted! Check your Telegram bot for status.' });
+        socket.emit('deposit_notice', { msg: '✅ Withdrawal request submitted successfully!' });
     });
 
     socket.on('redeem_code', (data) => {
