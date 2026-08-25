@@ -31,8 +31,7 @@
         .btn { border: none; border-radius: 8px; padding: 12px 20px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
         .btn-bet { background: #2ecc71; color: #fff; width: 100%; }
         .btn-bet:disabled { background: #555; cursor: not-allowed; }
-        .btn-cashout { background: #f1c40f; color: #000; width: 100%; font-size: 16px; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2; }
-        .btn-cashout span { font-size: 12px; font-weight: normal; }
+        .btn-cashout { background: #f1c40f; color: #000; width: 100%; font-size: 18px; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); }
 
         .actions-bar { display: flex; gap: 10px; justify-content: space-between; }
         .btn-act { flex: 1; background: #242f3e; color: #3b82f6; border: 1px solid #3b82f6; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; text-align: center; }
@@ -187,7 +186,6 @@
         let myBalance = 0;
         let currentStatus = 'WAITING';
         let isBetPlaced = false;
-        let activeBetAmount = 100;
         let timerInterval = null;
 
         const dispName = document.getElementById('disp-name');
@@ -219,11 +217,10 @@
             playBeep(600, 'sine', 0.2);
 
             if (isBetPlaced) {
+                betBtn.innerText = 'CASH OUT';
                 betBtn.className = 'btn btn-cashout';
-                betBtn.innerHTML = `CASH OUT<br><span>PKR ${(activeBetAmount * 1.00).toFixed(2)}</span>`;
             } else {
                 betBtn.innerText = 'ROUND IN PROGRESS';
-                betBtn.className = 'btn btn-bet';
                 betBtn.disabled = true;
             }
         });
@@ -231,12 +228,6 @@
         socket.on('tick', (data) => {
             multText.innerText = data.multiplier.toFixed(2) + 'x';
             planeMultiplier = data.multiplier;
-
-            // Update live cashout profit inside button dynamically
-            if (currentStatus === 'FLYING' && isBetPlaced) {
-                let currentWin = activeBetAmount * data.multiplier;
-                betBtn.innerHTML = `CASH OUT<br><span>PKR ${currentWin.toFixed(2)}</span>`;
-            }
         });
 
         socket.on('crashed', (data) => {
@@ -255,9 +246,8 @@
             }, 1000);
         });
 
-        socket.on('bet_confirmed', (data) => {
+        socket.on('bet_confirmed', () => {
             isBetPlaced = true;
-            activeBetAmount = data.amount;
             betBtn.innerText = 'BET PLACED (WAITING)';
             betBtn.disabled = true;
             playBeep(800, 'sine', 0.1);
@@ -267,7 +257,7 @@
             isBetPlaced = false;
             betBtn.className = 'btn btn-bet';
             betBtn.innerText = 'PLACE BET';
-            betBtn.disabled = false;
+            betBtn.disabled = true;
             playBeep(1200, 'sine', 0.3);
             alert(`🎉 Cashout Success! Won PKR ${res.winAmount}`);
         });
@@ -278,7 +268,6 @@
         betBtn.addEventListener('click', () => {
             if (currentStatus === 'WAITING' && !isBetPlaced) {
                 const amt = parseFloat(document.getElementById('betAmount').value);
-                activeBetAmount = amt;
                 socket.emit('place_bet', { amount: amt });
             } else if (currentStatus === 'FLYING' && isBetPlaced) {
                 socket.emit('cashout');
